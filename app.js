@@ -179,6 +179,13 @@
     // лидерборд
     app.appendChild(el('h2', { class: 'screen-title', text: 'Общий счёт' }));
     app.appendChild(renderLeaderboard(game, tot));
+
+    // нижние действия: настройка бонусов + новая игра (явными кнопками)
+    app.appendChild(el('div', { class: 'spacer' }));
+    app.appendChild(el('button', { class: 'btn ghost sm', text: '⚙️ Настройка бонусов', onclick: function () {
+      state.screen = 'settings'; render(); window.scrollTo(0, 0);
+    } }));
+    app.appendChild(el('button', { class: 'btn ghost sm', text: '🔄 Новая игра', onclick: resetGame }));
   }
 
   function renderPlayerInRound(game, round, player, totalScore) {
@@ -350,7 +357,7 @@
     } }));
 
     app.appendChild(el('div', { class: 'spacer' }));
-    app.appendChild(el('button', { class: 'btn danger sm', text: '🗑️ Завершить и начать новую партию', onclick: resetGame }));
+    app.appendChild(el('button', { class: 'btn danger sm', text: '🔄 Новая игра (стереть текущую)', onclick: resetGame }));
 
     app.appendChild(el('div', { class: 'spacer' }));
     app.appendChild(el('button', { class: 'btn', text: '← Назад', onclick: function () { state.screen = 'game'; render(); } }));
