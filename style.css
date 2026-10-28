@@ -102,6 +102,15 @@ h2.screen-title { font-size: 16px; color: var(--muted); font-weight: 600; margin
 }
 .round-head .rnum { font-size: 22px; font-weight: 800; }
 .round-head .cards { color: var(--muted); font-size: 14px; }
+.round-head .dealer { color: var(--gold); font-size: 13px; margin-top: 2px; }
+
+/* ---- выбор игроков из базы на старте ---- */
+.pick-row { display: flex; align-items: center; gap: 12px; padding: 12px 6px; border-top: 1px solid var(--border); cursor: pointer; }
+.pick-row:first-child { border-top: none; }
+.pick-box { width: 30px; height: 30px; border-radius: 8px; border: 1.5px solid var(--border); display: flex; align-items: center; justify-content: center; font-weight: 800; color: var(--gold); flex: none; }
+.pick-row.on { }
+.pick-row.on .pick-box { border-color: var(--gold); background: #2a3a24; }
+.pick-name { flex: 1; font-size: 17px; font-weight: 600; }
 .phase-pill { font-size: 12px; font-weight: 700; padding: 5px 10px; border-radius: 999px; background: var(--card2); color: var(--gold); border: 1px solid var(--border); }
 
 /* ---- player score block ---- */

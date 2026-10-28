@@ -26,7 +26,16 @@
       bonuses: cloneBonuses(),
       rounds: [], // заполняется по ходу
       finished: false,
+      archived: false,
+      dealerStart: players.length ? Math.floor(Math.random() * players.length) : 0,
     };
+  }
+
+  // кто раздаёт в раунде n: стартовый дилер + (n-1) по кругу (следующий в списке)
+  function dealerForRound(game, n) {
+    if (!game.players.length) return null;
+    var idx = ((game.dealerStart || 0) + (n - 1)) % game.players.length;
+    return game.players[idx];
   }
 
   function startRound(game, n) {
@@ -56,6 +65,46 @@
     } catch (e) { return null; }
   }
 
+  // ---------- база игроков + архив партий (локально) ----------
+  var ROSTER = 'skullking_roster_v1';     // постоянные игроки [{id,name}]
+  var HISTORY = 'skullking_history_v1';   // завершённые партии (для статы)
+  var LINEUP = 'skullking_lineup_v1';     // последний состав (id в порядке)
+
+  function jget(key, def) { try { var v = JSON.parse(localStorage.getItem(key)); return v || def; } catch (e) { return def; } }
+  function jset(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); } catch (e) {} }
+  function loadRoster() { return jget(ROSTER, []); }
+  function saveRoster(r) { jset(ROSTER, r); }
+  function loadHistory() { return jget(HISTORY, []); }
+  function saveHistory(h) { jset(HISTORY, h); }
+
+  function archiveGame(game) {
+    if (game.archived) return;
+    var tot = Scoring.totals(game);
+    var scores = {};
+    game.players.forEach(function (p) { scores[p.id] = tot[p.id] || 0; });
+    var winner = game.players.slice().sort(function (a, b) { return (scores[b.id] || 0) - (scores[a.id] || 0); })[0];
+    var hist = loadHistory();
+    hist.push({
+      finishedAt: new Date().toISOString(),
+      players: game.players.map(function (p) { return { id: p.id, name: p.name }; }),
+      scores: scores,
+      winnerId: winner ? winner.id : null,
+    });
+    saveHistory(hist);
+    game.archived = true;
+  }
+
+  function playerStats(id) {
+    var games = 0, wins = 0, sum = 0, best = null;
+    loadHistory().forEach(function (g) {
+      if (!g.scores || !(id in g.scores)) return;
+      games++; var s = g.scores[id]; sum += s;
+      if (best === null || s > best) best = s;
+      if (g.winnerId === id) wins++;
+    });
+    return { games: games, wins: wins, avg: games ? Math.round(sum / games) : 0, best: best === null ? 0 : best };
+  }
+
   // ---------- helpers ----------
   function el(tag, attrs, children) {
     var e = document.createElement(tag);
@@ -79,44 +128,72 @@
     else if (state.screen === 'history') renderHistory();
     else if (state.screen === 'settings') renderSettings();
     else if (state.screen === 'edit') renderEditRound();
+    else if (state.screen === 'players') renderPlayers();
   }
 
-  // ---------- экран: настройка игроков ----------
-  var setupNames = [];
+  // ---------- экран: старт партии (выбор состава из базы) ----------
+  var setupSelected = null; // id в порядке выбора; null = ещё не инициализирован
+  var setupNewName = '';
   function renderSetup() {
-    if (!setupNames.length) setupNames = ['', ''];
-    app.appendChild(el('h2', { class: 'screen-title', text: 'Игроки' }));
+    var roster = loadRoster();
+    var byId = {}; roster.forEach(function (p) { byId[p.id] = true; });
+    if (setupSelected === null) {
+      setupSelected = jget(LINEUP, []).filter(function (id) { return byId[id]; });
+    } else {
+      setupSelected = setupSelected.filter(function (id) { return byId[id]; });
+    }
+    var nameById = {}; roster.forEach(function (p) { nameById[p.id] = p.name; });
 
-    var card = el('card', {});
-    card = el('div', { class: 'card' });
-    setupNames.forEach(function (name, i) {
-      var input = el('input', {
-        type: 'text', value: name, placeholder: 'Игрок ' + (i + 1),
-        oninput: function (ev) { setupNames[i] = ev.target.value; },
+    app.appendChild(el('h2', { class: 'screen-title', text: 'Кто играет' }));
+
+    if (!roster.length) {
+      app.appendChild(el('div', { class: 'card muted', text: 'База игроков пуста — добавь первого ниже.' }));
+    } else {
+      var card = el('div', { class: 'card' });
+      roster.forEach(function (p) {
+        var pos = setupSelected.indexOf(p.id);
+        var sel = pos >= 0;
+        card.appendChild(el('div', { class: 'pick-row' + (sel ? ' on' : ''), onclick: function () {
+          var i = setupSelected.indexOf(p.id);
+          if (i >= 0) setupSelected.splice(i, 1); else setupSelected.push(p.id);
+          render();
+        } }, [
+          el('span', { class: 'pick-box', text: sel ? String(pos + 1) : '' }),
+          el('span', { class: 'pick-name', text: p.name }),
+        ]));
       });
-      var rm = el('button', { class: 'rm', text: '×', title: 'Убрать', onclick: function () {
-        setupNames.splice(i, 1); render();
-      } });
-      if (setupNames.length <= 2) rm.disabled = true, rm.style.opacity = '.3';
-      card.appendChild(el('div', { class: 'player-row' }, [
-        el('span', { class: 'drag', text: '≡' }), input, rm,
-      ]));
-    });
-    app.appendChild(card);
+      app.appendChild(card);
+      app.appendChild(el('div', { class: 'muted', text: 'Тапай в порядке посадки — номер = очередь. Дилер идёт по этому списку.' }));
+    }
 
-    app.appendChild(el('button', { class: 'btn ghost sm', text: '+ Добавить игрока', onclick: function () {
-      setupNames.push(''); render();
-    } }));
+    var newInput = el('input', { type: 'text', value: setupNewName, placeholder: 'Имя нового игрока',
+      oninput: function (e) { setupNewName = e.target.value; } });
+    app.appendChild(el('div', { class: 'player-row' }, [ newInput,
+      el('button', { class: 'rm', text: '+', title: 'Добавить в базу', onclick: function () {
+        var name = (setupNewName || '').trim(); if (!name) return;
+        var r = loadRoster(); var pl = { id: uid(), name: name };
+        r.push(pl); saveRoster(r); setupSelected.push(pl.id); setupNewName = ''; render();
+      } }),
+    ]));
 
     app.appendChild(el('div', { class: 'spacer' }));
     app.appendChild(el('button', { class: 'btn gold', text: '🏴‍☠️ Начать партию', onclick: function () {
-      var names = setupNames.map(function (s) { return s.trim(); }).filter(Boolean);
-      if (names.length < 2) { alert('Нужно минимум 2 игрока'); return; }
-      var players = names.map(function (n) { return { id: uid(), name: n }; });
+      if (setupSelected.length < 2) { alert('Выбери минимум 2 игрока'); return; }
+      var players = setupSelected.map(function (id) { return { id: id, name: nameById[id] }; });
+      jset(LINEUP, setupSelected.slice());
       state.game = newGame(players);
       startRound(state.game, 1);
       state.screen = 'game';
-      save(); render();
+      save(); render(); window.scrollTo(0, 0);
+    } }));
+
+    if (setupSelected.length) {
+      app.appendChild(el('button', { class: 'btn ghost sm', text: 'Сбросить состав', onclick: function () {
+        setupSelected = []; render();
+      } }));
+    }
+    app.appendChild(el('button', { class: 'btn ghost sm', text: '👥 База игроков и статистика', onclick: function () {
+      state.screen = 'players'; render(); window.scrollTo(0, 0);
     } }));
 
     if (load()) {
@@ -124,6 +201,55 @@
         state.game = load(); state.screen = 'game'; render();
       } }));
     }
+  }
+
+  // ---------- экран: база игроков + статистика ----------
+  var playersNewName = '';
+  function renderPlayers() {
+    app.appendChild(el('h2', { class: 'screen-title', text: 'База игроков' }));
+    var roster = loadRoster();
+    if (!roster.length) {
+      app.appendChild(el('div', { class: 'card muted', text: 'Пока никого. Добавь игроков ниже.' }));
+    } else {
+      var card = el('div', { class: 'card' });
+      roster.forEach(function (p, i) {
+        var st = playerStats(p.id);
+        card.appendChild(el('div', { class: 'pscore' }, [
+          el('div', { class: 'bonus-edit' }, [
+            el('input', { class: 'bl', type: 'text', value: p.name, oninput: function (e) {
+              var r = loadRoster(); if (r[i]) { r[i].name = e.target.value; saveRoster(r); }
+            } }),
+            el('button', { class: 'rm', text: '×', onclick: function () {
+              if (!confirm('Удалить ' + p.name + ' из базы? Статы прошлых партий останутся.')) return;
+              var r = loadRoster(); r.splice(i, 1); saveRoster(r); render();
+            } }),
+          ]),
+          el('div', { class: 'why', html: 'партий: <b>' + st.games + '</b> · побед: <b>' + st.wins +
+            '</b> · ср. счёт: <b>' + st.avg + '</b> · рекорд: <b>' + st.best + '</b>' }),
+        ]));
+      });
+      app.appendChild(card);
+    }
+
+    var newInput = el('input', { type: 'text', value: playersNewName, placeholder: 'Имя нового игрока',
+      oninput: function (e) { playersNewName = e.target.value; } });
+    app.appendChild(el('div', { class: 'player-row' }, [ newInput,
+      el('button', { class: 'rm', text: '+', onclick: function () {
+        var name = (playersNewName || '').trim(); if (!name) return;
+        var r = loadRoster(); r.push({ id: uid(), name: name }); saveRoster(r); playersNewName = ''; render();
+      } }),
+    ]));
+
+    app.appendChild(el('div', { class: 'spacer' }));
+    if (loadHistory().length) {
+      app.appendChild(el('button', { class: 'btn danger sm', text: '🗑️ Очистить статистику (архив партий)', onclick: function () {
+        if (!confirm('Стереть архив прошлых партий и статы? Сами игроки останутся.')) return;
+        saveHistory([]); render();
+      } }));
+    }
+    app.appendChild(el('button', { class: 'btn', text: '← Назад', onclick: function () {
+      state.screen = 'setup'; render(); window.scrollTo(0, 0);
+    } }));
   }
 
   // ---------- экран: раунд ----------
@@ -134,10 +260,12 @@
     var tot = Scoring.totals(game);
 
     // шапка раунда
+    var dealer = dealerForRound(game, round.n);
     app.appendChild(el('div', { class: 'round-head' }, [
       el('div', {}, [
         el('span', { class: 'rnum', text: 'Раунд ' + round.n }),
         el('div', { class: 'cards', text: round.n + ' ' + plural(round.n, ['карта', 'карты', 'карт']) + ' на руках' }),
+        dealer ? el('div', { class: 'dealer', text: '🎲 раздаёт: ' + dealer.name }) : null,
       ]),
       el('span', { class: 'phase-pill', text: round.phase === 'bids' ? 'СТАВКИ' : 'ВЗЯТКИ' }),
     ]));
@@ -168,7 +296,7 @@
       var last = round.n >= TOTAL_ROUNDS;
       cta.appendChild(el('button', { class: 'btn gold', text: last ? '🏆 Завершить партию' : 'Завершить раунд ' + round.n + ' →', onclick: function () {
         round.phase = 'done';
-        if (last) { game.finished = true; }
+        if (last) { game.finished = true; archiveGame(game); }
         else { startRound(game, round.n + 1); }
         save(); render(); window.scrollTo(0, 0);
       } }));
@@ -264,10 +392,12 @@
     if (!round) { state.screen = 'history'; return render(); }
     var tot = Scoring.totals(game);
 
+    var edealer = dealerForRound(game, round.n);
     app.appendChild(el('div', { class: 'round-head' }, [
       el('div', {}, [
         el('span', { class: 'rnum', text: '✏️ Правка · Раунд ' + round.n }),
         el('div', { class: 'cards', text: round.n + ' ' + plural(round.n, ['карта', 'карты', 'карт']) + ' на руках' }),
+        edealer ? el('div', { class: 'dealer', text: '🎲 раздаёт: ' + edealer.name }) : null,
       ]),
       el('span', { class: 'phase-pill', text: 'ПРАВКА' }),
     ]));
