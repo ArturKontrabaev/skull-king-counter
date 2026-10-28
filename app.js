@@ -105,6 +105,31 @@
     return { games: games, wins: wins, avg: games ? Math.round(sum / games) : 0, best: best === null ? 0 : best };
   }
 
+  // ---------- передача партии ссылкой (без сервера: состояние зашито в URL) ----------
+  function gameToLink(game) {
+    var b64 = btoa(unescape(encodeURIComponent(JSON.stringify(game))))
+      .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    return location.origin + location.pathname + '?s=' + b64;
+  }
+  function linkToGame(s) {
+    try {
+      var b64 = s.replace(/-/g, '+').replace(/_/g, '/');
+      var g = JSON.parse(decodeURIComponent(escape(atob(b64))));
+      if (g && g.players) { if (!g.bonuses) g.bonuses = cloneBonuses(); return g; }
+    } catch (e) {}
+    return null;
+  }
+  function shareGame() {
+    if (!state.game) return;
+    var url = gameToLink(state.game);
+    var msg = 'Ссылка на партию скопирована. Отправь её — кто откроет, продолжит с этого места.';
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(url).then(function () { alert(msg); }, function () { window.prompt('Скопируй ссылку на партию:', url); });
+    } else {
+      window.prompt('Скопируй ссылку на партию:', url);
+    }
+  }
+
   // ---------- helpers ----------
   function el(tag, attrs, children) {
     var e = document.createElement(tag);
@@ -312,6 +337,7 @@
 
     // нижние действия: настройка бонусов + новая игра (явными кнопками)
     app.appendChild(el('div', { class: 'spacer' }));
+    app.appendChild(el('button', { class: 'btn ghost sm', text: '🔗 Передать игру (ссылка)', onclick: shareGame }));
     app.appendChild(el('button', { class: 'btn ghost sm', text: '⚙️ Настройка бонусов', onclick: function () {
       state.screen = 'settings'; render(); window.scrollTo(0, 0);
     } }));
@@ -461,6 +487,7 @@
     app.appendChild(el('div', { class: 'winner', text: '🏆 Победил: ' + rows[0].name + ' (' + rows[0].score + ')' }));
     app.appendChild(renderLeaderboard(game, tot));
     app.appendChild(el('button', { class: 'btn ghost sm', text: '🗺️ Разбор по раундам', onclick: function () { state.screen = 'history'; render(); window.scrollTo(0, 0); } }));
+    app.appendChild(el('button', { class: 'btn ghost sm', text: '🔗 Передать игру (ссылка)', onclick: shareGame }));
     app.appendChild(el('div', { class: 'spacer' }));
     app.appendChild(el('button', { class: 'btn gold', text: '🏴‍☠️ Новая партия', onclick: resetGame }));
   }
@@ -573,7 +600,15 @@
   });
 
   // ---------- старт ----------
-  var saved = load();
-  if (saved) { state.game = saved; state.screen = 'game'; }
+  var sParam = (new URLSearchParams(location.search)).get('s');
+  var imported = sParam ? linkToGame(sParam) : null;
+  if (imported) {
+    // пришли по ссылке-передаче — загружаем переданную партию и продолжаем
+    state.game = imported; state.screen = 'game'; save();
+    if (window.history && history.replaceState) history.replaceState(null, '', location.pathname);
+  } else {
+    var saved = load();
+    if (saved) { state.game = saved; state.screen = 'game'; }
+  }
   render();
 })();
