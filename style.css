@@ -116,6 +116,9 @@ h2.screen-title { font-size: 16px; color: var(--muted); font-weight: 600; margin
 .ord-row:first-of-type { border-top: none; }
 .ord-btn { width: 44px; height: 40px; border-radius: 10px; border: 1px solid var(--border); background: var(--card2); color: var(--fg); font-size: 20px; line-height: 1; cursor: pointer; flex: none; }
 .ord-btn:disabled { opacity: .3; }
+.ord-row { cursor: grab; }
+.ord-row .drag { color: var(--muted); font-size: 18px; flex: none; }
+.round-head .dealer.tappable { cursor: pointer; }
 .phase-pill { font-size: 12px; font-weight: 700; padding: 5px 10px; border-radius: 999px; background: var(--card2); color: var(--gold); border: 1px solid var(--border); }
 
 /* ---- player score block ---- */

@@ -240,6 +240,8 @@
   // ---------- экран: старт партии (выбор состава из базы) ----------
   var setupSelected = null; // id в порядке выбора; null = ещё не инициализирован
   var setupNewName = '';
+  var dragFrom = null;       // индекс перетаскиваемого игрока (десктоп drag&drop)
+  var focusNewPlayer = false; // вернуть фокус в поле ввода после добавления (для Enter-подряд)
   function renderSetup() {
     var roster = loadRoster();
     var byId = {}; roster.forEach(function (p) { byId[p.id] = true; });
@@ -272,10 +274,10 @@
       app.appendChild(el('div', { class: 'muted', text: 'Тапай игроков — номер = очередь хода. Порядок меняй стрелками ниже.' }));
     }
 
-    // порядок хода выбранных (переставляемый) — дилер идёт по этому списку
+    // порядок хода выбранных: перетаскивание (мышь) + стрелки — дилер идёт по этому списку
     if (setupSelected.length) {
       var ord = el('div', { class: 'card' });
-      ord.appendChild(el('div', { class: 'field-label', text: 'Порядок хода (дилер по списку)' }));
+      ord.appendChild(el('div', { class: 'field-label', text: 'Порядок хода (тащи мышью или стрелками · дилер по списку)' }));
       setupSelected.forEach(function (id, i) {
         var up = el('button', { class: 'ord-btn', text: '↑', onclick: function () {
           var t = setupSelected[i - 1]; setupSelected[i - 1] = setupSelected[i]; setupSelected[i] = t; render();
@@ -285,24 +287,42 @@
         } });
         if (i === 0) up.disabled = true;
         if (i === setupSelected.length - 1) dn.disabled = true;
-        ord.appendChild(el('div', { class: 'ord-row' }, [
+        var row = el('div', { class: 'ord-row', draggable: 'true',
+          ondragstart: function (e) { dragFrom = i; try { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', String(i)); } catch (_) {} },
+          ondragover: function (e) { e.preventDefault(); },
+          ondrop: function (e) {
+            e.preventDefault();
+            if (dragFrom != null && dragFrom !== i) {
+              var it = setupSelected.splice(dragFrom, 1)[0];
+              setupSelected.splice(i, 0, it);
+            }
+            dragFrom = null; render();
+          },
+          ondragend: function () { dragFrom = null; },
+        }, [
+          el('span', { class: 'drag', text: '≡' }),
           el('span', { class: 'pick-box', text: String(i + 1) }),
           el('span', { class: 'pick-name', text: nameById[id] }),
           up, dn,
-        ]));
+        ]);
+        ord.appendChild(row);
       });
       app.appendChild(ord);
     }
 
+    var addSetupPlayer = function () {
+      var name = (setupNewName || '').trim(); if (!name) return;
+      var r = loadRoster(); var pl = { id: uid(), name: name };
+      r.push(pl); saveRoster(r); setupSelected.push(pl.id); setupNewName = '';
+      focusNewPlayer = true; render();
+    };
     var newInput = el('input', { type: 'text', value: setupNewName, placeholder: 'Имя нового игрока',
-      oninput: function (e) { setupNewName = e.target.value; } });
+      oninput: function (e) { setupNewName = e.target.value; },
+      onkeydown: function (e) { if (e.key === 'Enter' || e.keyCode === 13) { setupNewName = e.target.value; addSetupPlayer(); } } });
     app.appendChild(el('div', { class: 'player-row' }, [ newInput,
-      el('button', { class: 'rm', text: '+', title: 'Добавить в базу', onclick: function () {
-        var name = (setupNewName || '').trim(); if (!name) return;
-        var r = loadRoster(); var pl = { id: uid(), name: name };
-        r.push(pl); saveRoster(r); setupSelected.push(pl.id); setupNewName = ''; render();
-      } }),
+      el('button', { class: 'rm', text: '+', title: 'Добавить в базу', onclick: addSetupPlayer }),
     ]));
+    if (focusNewPlayer) { focusNewPlayer = false; setTimeout(function () { try { newInput.focus(); } catch (e) {} }, 0); }
 
     app.appendChild(el('div', { class: 'spacer' }));
     app.appendChild(el('button', { class: 'btn gold', text: '🏴‍☠️ Начать партию', onclick: function () {
@@ -360,14 +380,18 @@
       app.appendChild(card);
     }
 
+    var addRosterPlayer = function () {
+      var name = (playersNewName || '').trim(); if (!name) return;
+      var r = loadRoster(); r.push({ id: uid(), name: name }); saveRoster(r); playersNewName = '';
+      focusNewPlayer = true; render();
+    };
     var newInput = el('input', { type: 'text', value: playersNewName, placeholder: 'Имя нового игрока',
-      oninput: function (e) { playersNewName = e.target.value; } });
+      oninput: function (e) { playersNewName = e.target.value; },
+      onkeydown: function (e) { if (e.key === 'Enter' || e.keyCode === 13) { playersNewName = e.target.value; addRosterPlayer(); } } });
     app.appendChild(el('div', { class: 'player-row' }, [ newInput,
-      el('button', { class: 'rm', text: '+', onclick: function () {
-        var name = (playersNewName || '').trim(); if (!name) return;
-        var r = loadRoster(); r.push({ id: uid(), name: name }); saveRoster(r); playersNewName = ''; render();
-      } }),
+      el('button', { class: 'rm', text: '+', onclick: addRosterPlayer }),
     ]));
+    if (focusNewPlayer) { focusNewPlayer = false; setTimeout(function () { try { newInput.focus(); } catch (e) {} }, 0); }
 
     app.appendChild(el('div', { class: 'spacer' }));
     if (loadHistory().length) {
@@ -394,7 +418,8 @@
       el('div', {}, [
         el('span', { class: 'rnum', text: 'Раунд ' + round.n }),
         el('div', { class: 'cards', text: round.n + ' ' + plural(round.n, ['карта', 'карты', 'карт']) + ' на руках' }),
-        dealer ? el('div', { class: 'dealer', text: '🎲 раздаёт: ' + dealer.name }) : null,
+        dealer ? el('div', { class: 'dealer tappable', text: '🎲 раздаёт: ' + dealer.name + ' · сменить ▸',
+          onclick: function () { game.dealerStart = ((game.dealerStart || 0) + 1) % game.players.length; save(); render(); } }) : null,
         game.cloud ? el('div', { class: 'online', text: '🌐 онлайн-стол · обновляется live' }) : null,
       ]),
       el('span', { class: 'phase-pill', text: round.phase === 'bids' ? 'СТАВКИ' : 'ВЗЯТКИ' }),
@@ -531,7 +556,8 @@
       el('div', {}, [
         el('span', { class: 'rnum', text: '✏️ Правка · Раунд ' + round.n }),
         el('div', { class: 'cards', text: round.n + ' ' + plural(round.n, ['карта', 'карты', 'карт']) + ' на руках' }),
-        edealer ? el('div', { class: 'dealer', text: '🎲 раздаёт: ' + edealer.name }) : null,
+        edealer ? el('div', { class: 'dealer tappable', text: '🎲 раздаёт: ' + edealer.name + ' · сменить ▸',
+          onclick: function () { game.dealerStart = ((game.dealerStart || 0) + 1) % game.players.length; save(); render(); } }) : null,
       ]),
       el('span', { class: 'phase-pill', text: 'ПРАВКА' }),
     ]));
