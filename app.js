@@ -85,17 +85,22 @@
 
   // ---------- общая база игроков + архив партий (одна на всю компанию, в облаке) ----------
   var LINEUP = 'skullking_lineup_v1';   // последний состав (локальная мелочь, не общая)
-  var CREW_STORE = 'skullking_crew_v1'; // локальное зеркало общей базы
-  var crew = { players: [], history: [], rev: 0 };
-  try { var _cm = JSON.parse(localStorage.getItem(CREW_STORE)); if (_cm) crew = { players: _cm.players || [], history: _cm.history || [], rev: _cm.rev || 0 }; } catch (e) {}
+  var CREW_STORE = 'skullking_crew_v2'; // локальное зеркало общей базы (v2 — сброс тестового мусора)
+  var crew = { players: [], history: [], removed: [] };
+  try { var _cm = JSON.parse(localStorage.getItem(CREW_STORE)); if (_cm) crew = { players: _cm.players || [], history: _cm.history || [], removed: _cm.removed || [] }; } catch (e) {}
   function persistCrew() { try { localStorage.setItem(CREW_STORE, JSON.stringify(crew)); } catch (e) {} }
 
   function jget(key, def) { try { var v = JSON.parse(localStorage.getItem(key)); return v || def; } catch (e) { return def; } }
   function jset(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); } catch (e) {} }
   function loadRoster() { return crew.players; }
-  function saveRoster(r) { crew.players = r; crew.rev = (crew.rev || 0) + 1; persistCrew(); cloudPushCrew(); }
+  function saveRoster(r) {
+    // надгробия: id, которые были в базе, а теперь удалены — чтобы не «воскресали» при слиянии
+    var keep = {}; r.forEach(function (p) { keep[p.id] = 1; });
+    (crew.players || []).forEach(function (p) { if (!keep[p.id] && crew.removed.indexOf(p.id) < 0) crew.removed.push(p.id); });
+    crew.players = r; persistCrew(); cloudPushCrew();
+  }
   function loadHistory() { return crew.history; }
-  function saveHistory(h) { crew.history = h; crew.rev = (crew.rev || 0) + 1; persistCrew(); cloudPushCrew(); }
+  function saveHistory(h) { crew.history = h; persistCrew(); cloudPushCrew(); }
 
   function archiveGame(game) {
     if (game.archived) return;
@@ -192,6 +197,37 @@
       .then(function (rows) { cb(rows && rows[0] ? rows[0].data : null); })
       .catch(function () { cb(null); });
   }
+  // слияние общей базы: объединение игроков (со всех устройств), минус удалённые (надгробия)
+  function mergeCrew(remote) {
+    remote = remote || {};
+    var removed = {};
+    (crew.removed || []).concat(remote.removed || []).forEach(function (id) { removed[id] = 1; });
+    var seen = {}, players = [];
+    (crew.players || []).concat(remote.players || []).forEach(function (p) {
+      if (!p || seen[p.id] || removed[p.id]) return; seen[p.id] = 1; players.push(p);
+    });
+    var hSeen = {}, history = [];
+    (crew.history || []).concat(remote.history || []).forEach(function (g) {
+      var k = (g && g.finishedAt) || JSON.stringify(g); if (hSeen[k]) return; hSeen[k] = 1; history.push(g);
+    });
+    return { players: players, history: history, removed: Object.keys(removed) };
+  }
+  function crewKey(c) {
+    return JSON.stringify({
+      p: (c.players || []).map(function (x) { return x.id + ':' + x.name; }),
+      r: (c.removed || []).slice().sort(),
+      h: (c.history || []).length,
+    });
+  }
+  // применить облачную базу: слить, обновить локально если изменилось, залить если облако отстаёт
+  function adoptCrew(remote) {
+    var merged = mergeCrew(remote || {});
+    var changedLocal = crewKey(merged) !== crewKey(crew);
+    var changedRemote = !remote || crewKey(merged) !== crewKey(remote);
+    if (changedLocal) { crew = merged; persistCrew(); }
+    if (changedRemote) cloudPushCrew();
+    return changedLocal;
+  }
 
   function stopPolling() { if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } }
   function startPolling() { stopPolling(); pollTimer = setInterval(pollTick, 2500); }
@@ -207,14 +243,9 @@
         }
       });
     }
-    // общая база/статы — принимаем только если облачная версия НОВЕЕ (иначе затрём свои правки)
+    // общая база/статы — сливаем (объединение), чтобы добавления со всех устройств копились
     cloudFetchCrew(function (data) {
-      if (!data) return;
-      if ((data.rev || 0) > (crew.rev || 0)) {
-        crew = { players: data.players || [], history: data.history || [], rev: data.rev || 0 };
-        persistCrew();
-        if (state.screen === 'setup' || state.screen === 'players') render();
-      }
+      if (adoptCrew(data) && (state.screen === 'setup' || state.screen === 'players')) render();
     });
   }
 
@@ -753,13 +784,7 @@
     }
   });
   cloudFetchCrew(function (data) {
-    if (data && (data.rev || 0) > (crew.rev || 0)) {
-      crew = { players: data.players || [], history: data.history || [], rev: data.rev || 0 };
-      persistCrew();
-      if (state.screen === 'setup' || state.screen === 'players') render();
-    } else if ((crew.rev || 0) > 0) {
-      cloudPushCrew(); // наша база новее / в облаке нет — залить в общий
-    }
+    if (adoptCrew(data) && (state.screen === 'setup' || state.screen === 'players')) render();
   });
   startPolling();
 })();
