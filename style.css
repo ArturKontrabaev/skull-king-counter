@@ -103,6 +103,7 @@ h2.screen-title { font-size: 16px; color: var(--muted); font-weight: 600; margin
 .round-head .rnum { font-size: 22px; font-weight: 800; }
 .round-head .cards { color: var(--muted); font-size: 14px; }
 .round-head .dealer { color: var(--gold); font-size: 13px; margin-top: 2px; }
+.round-head .online { color: var(--green); font-size: 12px; margin-top: 2px; }
 
 /* ---- выбор игроков из базы на старте ---- */
 .pick-row { display: flex; align-items: center; gap: 12px; padding: 12px 6px; border-top: 1px solid var(--border); cursor: pointer; }

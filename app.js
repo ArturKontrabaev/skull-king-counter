@@ -5,6 +5,16 @@
   var STORE = 'skullking_game_v1';
   var TOTAL_ROUNDS = Scoring.TOTAL_ROUNDS; // 10
 
+  // --- Supabase (онлайн-стол: все видят партию live) ---
+  // Publishable-ключ публичный по дизайну (доступ рулит RLS), поэтому ок в браузере.
+  var SUPA_URL = 'https://geponnogqgteczpdmdmt.supabase.co';
+  var SUPA_KEY = 'sb_publishable_NWaNkQuvmfEaz1aQz-NbhA_OY8Pj1m0';
+  function supaHeaders(extra) {
+    var h = { 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY, 'Content-Type': 'application/json' };
+    if (extra) for (var k in extra) h[k] = extra[k];
+    return h;
+  }
+
   // ---------- состояние ----------
   var state = {
     screen: 'setup', // 'setup' | 'game' | 'history' | 'settings' | 'edit'
@@ -58,6 +68,7 @@
       if (state.game) state.game.rev = (state.game.rev || 1) + 1; // монотонная версия
       localStorage.setItem(STORE, JSON.stringify(state.game));
     } catch (e) {}
+    cloudPush(); // если партия онлайн — отправить в облако (дебаунс)
   }
   function load() {
     try {
@@ -142,6 +153,61 @@
       navigator.clipboard.writeText(url).then(function () { alert(msg); }, function () { window.prompt('Скопируй ссылку на партию:', url); });
     } else {
       window.prompt('Скопируй ссылку на партию:', url);
+    }
+  }
+
+  // ---------- онлайн-стол (Supabase): все видят партию live ----------
+  var pushTimer = null, pollTimer = null;
+
+  function cloudPushNow() {
+    var g = state.game;
+    if (!g || !g.cloud) return;
+    fetch(SUPA_URL + '/rest/v1/games', {
+      method: 'POST',
+      headers: supaHeaders({ 'Prefer': 'resolution=merge-duplicates' }),
+      body: JSON.stringify({ id: g.id, state: g }),
+    }).catch(function () {});
+  }
+  function cloudPush() {
+    if (!state.game || !state.game.cloud) return;
+    if (pushTimer) clearTimeout(pushTimer);
+    pushTimer = setTimeout(cloudPushNow, 800);
+  }
+  function cloudFetch(id, cb) {
+    fetch(SUPA_URL + '/rest/v1/games?id=eq.' + encodeURIComponent(id) + '&select=state', { headers: supaHeaders() })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (rows) { cb(rows && rows[0] ? rows[0].state : null); })
+      .catch(function () { cb(null); });
+  }
+  function stopPolling() { if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } }
+  function startPolling() {
+    stopPolling();
+    if (!state.game || !state.game.cloud) return;
+    pollTimer = setInterval(function () {
+      if (!state.game || !state.game.cloud) { stopPolling(); return; }
+      cloudFetch(state.game.id, function (remote) {
+        if (!remote) return;
+        if ((remote.rev || 0) > (state.game.rev || 0)) {
+          remote.cloud = true;
+          state.game = remote;
+          try { localStorage.setItem(STORE, JSON.stringify(remote)); } catch (e) {}
+          render(); // подтянули более свежую версию от другого игрока
+        }
+      });
+    }, 2500);
+  }
+  function shareOnline() {
+    if (!state.game) return;
+    state.game.cloud = true;
+    save();          // зафиксировать cloud=true + запушить
+    cloudPushNow();  // и сразу, без дебаунса
+    startPolling();
+    var url = location.origin + location.pathname + '?g=' + encodeURIComponent(state.game.id);
+    var msg = 'Ссылка на онлайн-стол скопирована. Все, кто откроют, видят партию вживую и могут продолжать.';
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(url).then(function () { alert(msg); }, function () { window.prompt('Ссылка на онлайн-стол:', url); });
+    } else {
+      window.prompt('Ссылка на онлайн-стол:', url);
     }
   }
 
@@ -329,6 +395,7 @@
         el('span', { class: 'rnum', text: 'Раунд ' + round.n }),
         el('div', { class: 'cards', text: round.n + ' ' + plural(round.n, ['карта', 'карты', 'карт']) + ' на руках' }),
         dealer ? el('div', { class: 'dealer', text: '🎲 раздаёт: ' + dealer.name }) : null,
+        game.cloud ? el('div', { class: 'online', text: '🌐 онлайн-стол · обновляется live' }) : null,
       ]),
       el('span', { class: 'phase-pill', text: round.phase === 'bids' ? 'СТАВКИ' : 'ВЗЯТКИ' }),
     ]));
@@ -375,7 +442,10 @@
 
     // нижние действия: настройка бонусов + новая игра (явными кнопками)
     app.appendChild(el('div', { class: 'spacer' }));
-    app.appendChild(el('button', { class: 'btn ghost sm', text: '🔗 Передать игру (ссылка)', onclick: shareGame }));
+    app.appendChild(el('button', { class: 'btn' + (game.cloud ? ' ghost sm' : ' gold'),
+      text: game.cloud ? '🌐 Онлайн-стол активен — скопировать ссылку' : '🌐 Открыть онлайн-стол (все видят live)',
+      onclick: shareOnline }));
+    app.appendChild(el('button', { class: 'btn ghost sm', text: '🔗 Передать копию (без интернета)', onclick: shareGame }));
     app.appendChild(el('button', { class: 'btn ghost sm', text: '⚙️ Настройка бонусов', onclick: function () {
       state.screen = 'settings'; render(); window.scrollTo(0, 0);
     } }));
@@ -612,10 +682,11 @@
 
   function resetGame() {
     if (!confirm('Начать новую партию? Текущая будет стёрта.')) return;
+    stopPolling(); // остановить облачный синк прошлой партии
     try { localStorage.removeItem(STORE); } catch (e) {}
     state.game = null;
     setupSelected = []; setupNewName = '';
-    stripShareParam(); // убрать ?s из адреса, чтобы старая партия не воскресла при перезагрузке
+    stripShareParam(); // убрать ?s/?g из адреса, чтобы старая партия не воскресла при перезагрузке
     state.screen = 'setup';
     render();
   }
@@ -639,28 +710,36 @@
   });
 
   // ---------- старт ----------
-  var sParam = (new URLSearchParams(location.search)).get('s');
-  var imported = sParam ? linkToGame(sParam) : null;
+  var params = new URLSearchParams(location.search);
+  var gParam = params.get('g'); // онлайн-стол (Supabase)
+  var sParam = params.get('s'); // снапшот-ссылка (без сервера)
   var local = load();
-  if (imported) {
-    var useImported = true;
-    if (local && local.id === imported.id) {
-      // та же партия — берём более свежую (защита от сброса при перезагрузке)
-      useImported = (imported.rev || 0) > (local.rev || 0);
-    } else if (local && local.id !== imported.id) {
-      // в адресе ссылка на ДРУГУЮ партию, а у нас уже идёт своя — спросить, не затирать молча
-      useImported = window.confirm('Открыть присланную партию? Текущая партия на этом телефоне будет заменена.');
-      if (!useImported) stripShareParam();
+
+  if (gParam) {
+    // онлайн-стол: тянем партию из облака и подписываемся на обновления
+    app.innerHTML = '<div class="card muted">⏳ Загружаю онлайн-стол…</div>';
+    cloudFetch(gParam, function (remote) {
+      if (remote) {
+        remote.cloud = true;
+        state.game = remote; state.screen = 'game';
+        try { localStorage.setItem(STORE, JSON.stringify(remote)); } catch (e) {}
+        startPolling();
+      } else {
+        alert('Онлайн-партия не найдена (возможно, ссылка устарела).');
+        state.screen = 'setup';
+      }
+      render();
+    });
+  } else {
+    // снапшот-ссылка: загружаем ТОЛЬКО если локальной партии нет (без диалогов —
+    // чтобы не подвешивать и не воскрешать чужую поверх текущей)
+    var imported = sParam ? linkToGame(sParam) : null;
+    if (imported && !local) {
+      state.game = imported; state.screen = 'game';
+      try { localStorage.setItem(STORE, JSON.stringify(imported)); } catch (e) {}
+    } else if (local) {
+      state.game = local; state.screen = 'game';
     }
-    if (useImported) {
-      state.game = imported;
-      try { localStorage.setItem(STORE, JSON.stringify(state.game)); } catch (e) {}
-    } else {
-      state.game = local;
-    }
-    state.screen = 'game';
-  } else if (local) {
-    state.game = local; state.screen = 'game';
+    render();
   }
-  render();
 })();
