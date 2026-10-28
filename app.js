@@ -200,7 +200,29 @@
         ]));
       });
       app.appendChild(card);
-      app.appendChild(el('div', { class: 'muted', text: 'Тапай в порядке посадки — номер = очередь. Дилер идёт по этому списку.' }));
+      app.appendChild(el('div', { class: 'muted', text: 'Тапай игроков — номер = очередь хода. Порядок меняй стрелками ниже.' }));
+    }
+
+    // порядок хода выбранных (переставляемый) — дилер идёт по этому списку
+    if (setupSelected.length) {
+      var ord = el('div', { class: 'card' });
+      ord.appendChild(el('div', { class: 'field-label', text: 'Порядок хода (дилер по списку)' }));
+      setupSelected.forEach(function (id, i) {
+        var up = el('button', { class: 'ord-btn', text: '↑', onclick: function () {
+          var t = setupSelected[i - 1]; setupSelected[i - 1] = setupSelected[i]; setupSelected[i] = t; render();
+        } });
+        var dn = el('button', { class: 'ord-btn', text: '↓', onclick: function () {
+          var t = setupSelected[i + 1]; setupSelected[i + 1] = setupSelected[i]; setupSelected[i] = t; render();
+        } });
+        if (i === 0) up.disabled = true;
+        if (i === setupSelected.length - 1) dn.disabled = true;
+        ord.appendChild(el('div', { class: 'ord-row' }, [
+          el('span', { class: 'pick-box', text: String(i + 1) }),
+          el('span', { class: 'pick-name', text: nameById[id] }),
+          up, dn,
+        ]));
+      });
+      app.appendChild(ord);
     }
 
     var newInput = el('input', { type: 'text', value: setupNewName, placeholder: 'Имя нового игрока',
