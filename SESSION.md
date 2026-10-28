@@ -1,5 +1,13 @@
 # Skull King Counter — под-подпроект (apps → skull-king-counter)
 
+## 🔖 2026-10-28 (день 3) — ОНЛАЙН-СТОЛ на Supabase (live)
+- **Supabase подключён.** Проект `geponnogqgteczpdmdmt`, URL `https://geponnogqgteczpdmdmt.supabase.co`, publishable-ключ в app.js (публичный, RLS защищает). Таблицы `games`/`rosters` + RLS-политики `anon all` (SQL в `docs/supabase-schema.sql`, прогнан).
+- **Онлайн-стол:** кнопка «🌐 Открыть онлайн-стол» → партия пушится в облако, ссылка `?g=<id>`. Открывший видит live (поллинг 2.5с, синк по rev), любой может продолжать — у всех синхронно. Бейдж «🌐 онлайн» в шапке. Проверено end-to-end.
+- Снапшот-ссылка `?s=` упрощена (убран зависавший confirm — был баг «висит»): импортит только если нет локальной партии.
+- Фикс регрессии: «Новая игра» падала (stale `setupNames` под use strict) — починено.
+- Прод: kontrabaeva.art/skull (reg.ru статика) + GitHub Pages бэкап. Деплой `deploy-regru.sh`.
+- NEXT: общая база игроков через `rosters` (сейчас база локальная); UX-правки по реальной игре.
+
 ## 🔖 2026-10-28 (день 2) — хостинг на reg.ru + передача по ссылке
 - **Новый прод-адрес: https://kontrabaeva.art/skull/** (reg.ru, статика, FTP-деплой `deploy-regru.sh`, креды из `nastya/.deploy.env`). Гитхаб-Pages остаётся бэкапом. index.html помечен `noindex`. Настин `deploy.sh` пропатчен `-X 'skull/'` (чтоб её выкладка не сносила папку).
 - **reg.ru = статический nginx, PHP ВЫКЛЮЧЕН** (отдаёт .php исходником). Для live/общей базы нужно включить PHP в панели reg.ru (ISPmanager) — Артур ищет настройку, UI не нашёл поле → ждём скрин панели. План Б — мини-сервис на VPS с HTTPS-поддоменом.
