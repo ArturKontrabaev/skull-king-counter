@@ -232,21 +232,28 @@
   function stopPolling() { if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } }
   function startPolling() { stopPolling(); pollTimer = setInterval(pollTick, 2500); }
   function pollTick() {
-    // текущая партия (если мы в ней): подтянуть свежую/новую от других
-    if (state.game) {
-      cloudFetchGame(function (remote) {
-        if (!remote) return;
-        if (remote.id !== state.game.id || (remote.rev || 0) > (state.game.rev || 0)) {
+    // общий стол — проверяем ВСЕГДА (даже на экране старта), чтобы подхватить
+    // созданную другим устройством партию и расходиться, если стол очистили.
+    cloudFetchGame(function (remote) {
+      if (remote) {
+        if (!state.game || remote.id !== state.game.id || (remote.rev || 0) > (state.game.rev || 0)) {
           state.game = remote;
           try { localStorage.setItem(STORE, JSON.stringify(remote)); } catch (e) {}
+          if (state.screen === 'setup') state.screen = 'game';
           if (state.screen === 'game' || state.screen === 'history') render();
         }
-      });
-    }
-    // общая база/статы — сливаем (объединение), чтобы добавления со всех устройств копились
-    cloudFetchCrew(function (data) {
-      if (adoptCrew(data) && (state.screen === 'setup' || state.screen === 'players')) render();
+      } else if (state.game && (state.screen === 'game' || state.screen === 'history')) {
+        // стол очищен (кто-то начал новую игру) — на экран старта
+        state.game = null;
+        try { localStorage.removeItem(STORE); } catch (e) {}
+        state.screen = 'setup'; render();
+      }
     });
+    // Общую базу НЕ трогаем, пока игрок активно её редактирует (экран старта/база) —
+    // иначе опрос перерисовывает экран и мешает добавлять. Чужие правки подтянутся при входе.
+    if (state.screen !== 'setup' && state.screen !== 'players') {
+      cloudFetchCrew(function (data) { adoptCrew(data); });
+    }
   }
 
   // ---------- helpers ----------
@@ -742,11 +749,13 @@
   }
 
   function resetGame() {
-    if (!confirm('Начать новую партию? Текущая будет стёрта.')) return;
+    if (!confirm('Начать новую партию? Текущий стол будет стёрт у всех.')) return;
     try { localStorage.removeItem(STORE); } catch (e) {}
     state.game = null;
+    // очистить общий стол, чтобы у всех устройств тоже сбросилось на экран старта
+    fetch(SUPA_URL + '/rest/v1/games?id=eq.' + CURRENT_ID, { method: 'DELETE', headers: supaHeaders() }).catch(function () {});
     setupSelected = []; setupNewName = '';
-    stripShareParam(); // убрать ?s/?g из адреса, чтобы старая партия не воскресла при перезагрузке
+    stripShareParam();
     state.screen = 'setup';
     render();
   }

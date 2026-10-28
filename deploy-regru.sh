@@ -16,6 +16,12 @@ TMP=$(mktemp -d)
 cp index.html app.js scoring.js style.css manifest.json "$TMP"/
 cp -r icons "$TMP"/
 
+# cache-busting: подставить версию (epoch) в ссылки на скрипты/стили, чтобы устройства
+# всегда тянули свежий код, а не закэшированный старый
+V=$(date +%s)
+sed -i "s#\(scoring\.js\|app\.js\|style\.css\)\"#\1?v=$V\"#g" "$TMP/index.html"
+echo "  версия ассетов: v=$V"
+
 echo "→ Заливаю skull/ на $FTP_HOST ..."
 lftp -u "$FTP_USER,$FTP_PASS" "$FTP_HOST" -e "
   set ftp:ssl-allow no; set net:timeout 20; set net:max-retries 3;
