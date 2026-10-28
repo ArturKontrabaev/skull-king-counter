@@ -71,5 +71,13 @@ var game = {
 };
 eq(S.totals(game), { a: 0, b: 60 }, 'итоги партии a=0 b=60');
 
+// незавершённый (идущий) раунд НЕ учитывается в общем счёте
+var liveGame = {
+  players: [{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }],
+  bonuses: defs,
+  rounds: [ { n: 1, phase: 'bids', entries: { a: { bid: 0, tricks: 0 }, b: { bid: 0, tricks: 0 } } } ],
+};
+eq(S.totals(liveGame), { a: 0, b: 0 }, 'идущий раунд не даёт предварительных очков');
+
 console.log(failures === 0 ? '\nВСЕ ТЕСТЫ ПРОШЛИ' : '\n' + failures + ' ПАДЕНИЙ');
 process.exit(failures === 0 ? 0 : 1);

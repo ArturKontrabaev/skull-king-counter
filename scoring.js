@@ -105,6 +105,9 @@
     var acc = {};
     (game.players || []).forEach(function (p) { acc[p.id] = 0; });
     (game.rounds || []).forEach(function (round) {
+      // в общий счёт — только ЗАВЕРШЁННЫЕ раунды (незавершённый не считаем предварительно).
+      // (раунды без поля phase считаем — для обратной совместимости/тестов)
+      if (round.phase && round.phase !== 'done') return;
       var entries = round.entries || {};
       Object.keys(entries).forEach(function (pid) {
         var r = roundScore(entries[pid], round.n, game.bonuses);
