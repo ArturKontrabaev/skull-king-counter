@@ -7,8 +7,9 @@
 
   // ---------- состояние ----------
   var state = {
-    screen: 'setup', // 'setup' | 'game' | 'history' | 'settings'
+    screen: 'setup', // 'setup' | 'game' | 'history' | 'settings' | 'edit'
     game: null,
+    editingRoundIndex: null, // индекс раунда в правке (для экрана 'edit')
   };
 
   function uid() {
@@ -77,6 +78,7 @@
     else if (state.screen === 'game') renderGame();
     else if (state.screen === 'history') renderHistory();
     else if (state.screen === 'settings') renderSettings();
+    else if (state.screen === 'edit') renderEditRound();
   }
 
   // ---------- экран: настройка игроков ----------
@@ -142,7 +144,7 @@
 
     var card = el('div', { class: 'card' });
     game.players.forEach(function (p) {
-      card.appendChild(renderPlayerInRound(game, round, p, tot[p.id]));
+      card.appendChild(renderPlayerInRound(game, round, p, tot[p.id], round.phase));
     });
     app.appendChild(card);
 
@@ -188,7 +190,7 @@
     app.appendChild(el('button', { class: 'btn ghost sm', text: '🔄 Новая игра', onclick: resetGame }));
   }
 
-  function renderPlayerInRound(game, round, player, totalScore) {
+  function renderPlayerInRound(game, round, player, totalScore, mode) {
     var entry = round.entries[player.id];
     var block = el('div', { class: 'pscore' });
 
@@ -197,16 +199,25 @@
       el('span', { class: 'ptotal', text: 'всего: ' + totalScore }),
     ]));
 
-    if (round.phase === 'bids') {
+    var showBid = mode === 'bids' || mode === 'edit';
+    var showTricks = mode === 'tricks' || mode === 'edit';
+
+    if (showBid) {
       block.appendChild(el('div', { class: 'field-label', text: 'Ставка (0…' + round.n + ')' }));
       block.appendChild(stepper(entry.bid, 0, round.n, function (v) { entry.bid = v; save(); render(); }));
-    } else {
-      block.appendChild(el('div', { class: 'field-label', text: 'Ставил ' + entry.bid + ' · взял (0…' + round.n + ')' }));
+    }
+
+    if (showTricks) {
+      var tlabel = mode === 'edit'
+        ? 'Взял взяток (0…' + round.n + ')'
+        : 'Ставил ' + entry.bid + ' · взял (0…' + round.n + ')';
+      block.appendChild(el('div', { class: 'field-label', text: tlabel }));
       block.appendChild(stepper(entry.tricks, 0, round.n, function (v) { entry.tricks = v; save(); render(); }));
 
-      // бонусы (только включённые)
+      // бонусы — только включённые И только если игрок реально взял ≥1 взятку
+      // (без выигранной взятки нечего захватывать → бонус невозможен)
       var enabled = game.bonuses.filter(function (b) { return b.enabled; });
-      if (enabled.length) {
+      if (enabled.length && entry.tricks > 0) {
         var wrap = el('div', { class: 'bonuses' });
         enabled.forEach(function (b) {
           var cnt = entry.bonuses[b.id] || 0;
@@ -226,9 +237,7 @@
         block.appendChild(wrap);
       }
 
-      // результат + расшифровка
-      var r = Scoring.roundScore(entry, round.n, game.bonuses);
-      block.appendChild(resultLine(r));
+      block.appendChild(resultLine(Scoring.roundScore(entry, round.n, game.bonuses)));
     }
     return block;
   }
@@ -240,11 +249,49 @@
       why += ' · <span class="b">' + esc(b.label) + (b.count > 1 ? ' ×' + b.count : '') + ' → +' + b.sum + '</span>';
     });
     if (r.bonusesIgnored) {
-      why += ' · <span class="warn">бонусы не засчитаны (ставка не угадана)</span>';
+      why += ' · <span class="warn">бонусы не засчитаны (' + (r.bonusesIgnoredReason || 'ставка не угадана') + ')</span>';
     }
     return el('div', { class: 'result', html:
       '<span class="sum ' + cls + '">' + (r.total > 0 ? '+' : '') + r.total + '</span> за раунд' +
       '<div class="why">' + why + '</div>' });
+  }
+
+  // ---------- экран: правка сыгранного раунда ----------
+  function renderEditRound() {
+    var game = state.game;
+    var idx = state.editingRoundIndex;
+    var round = game && idx != null ? game.rounds[idx] : null;
+    if (!round) { state.screen = 'history'; return render(); }
+    var tot = Scoring.totals(game);
+
+    app.appendChild(el('div', { class: 'round-head' }, [
+      el('div', {}, [
+        el('span', { class: 'rnum', text: '✏️ Правка · Раунд ' + round.n }),
+        el('div', { class: 'cards', text: round.n + ' ' + plural(round.n, ['карта', 'карты', 'карт']) + ' на руках' }),
+      ]),
+      el('span', { class: 'phase-pill', text: 'ПРАВКА' }),
+    ]));
+
+    var card = el('div', { class: 'card' });
+    game.players.forEach(function (p) {
+      card.appendChild(renderPlayerInRound(game, round, p, tot[p.id], 'edit'));
+    });
+    app.appendChild(card);
+
+    var sumT = game.players.reduce(function (s, p) { return s + (round.entries[p.id].tricks || 0); }, 0);
+    if (sumT !== round.n) {
+      app.appendChild(el('div', { class: 'card', html:
+        '<span class="why warn">⚠️ Сумма взяток = ' + sumT + ', а разыграно должно быть ' + round.n + '.</span>' }));
+    }
+
+    var cta = el('div', { class: 'sticky-cta' });
+    cta.appendChild(el('button', { class: 'btn gold', text: '✅ Готово', onclick: function () {
+      state.editingRoundIndex = null; state.screen = 'history'; save(); render(); window.scrollTo(0, 0);
+    } }));
+    app.appendChild(cta);
+
+    app.appendChild(el('h2', { class: 'screen-title', text: 'Общий счёт (пересчитан)' }));
+    app.appendChild(renderLeaderboard(game, tot));
   }
 
   // ---------- stepper ----------
@@ -295,9 +342,11 @@
     if (!game || !game.rounds.length) {
       app.appendChild(el('div', { class: 'card muted', text: 'Пока нет сыгранных раундов.' }));
     } else {
-      var played = game.rounds.filter(function (r) { return r.phase === 'done'; });
+      var played = [];
+      game.rounds.forEach(function (r, i) { if (r.phase === 'done') played.push({ round: r, idx: i }); });
       if (!played.length) app.appendChild(el('div', { class: 'card muted', text: 'Ни одного завершённого раунда.' }));
-      played.slice().reverse().forEach(function (round) {
+      played.slice().reverse().forEach(function (o) {
+        var round = o.round, idx = o.idx;
         var det = el('details', { class: 'card hround' });
         var sumLine = el('summary', {}, [
           el('span', { text: 'Раунд ' + round.n }),
@@ -314,6 +363,9 @@
             el('span', { class: 'hs', text: (r.total > 0 ? '+' : '') + r.total }),
           ]));
         });
+        det.appendChild(el('button', { class: 'btn ghost sm', text: '✏️ Редактировать раунд ' + round.n, onclick: function () {
+          state.editingRoundIndex = idx; state.screen = 'edit'; render(); window.scrollTo(0, 0);
+        } }));
         app.appendChild(det);
       });
     }

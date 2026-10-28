@@ -37,6 +37,23 @@ var r3 = S.roundScore({ bid: 1, tricks: 1, bonuses: { pir_mer: 2 } }, 5, defs);
 eq(r3.bonusTotal, 0, 'r3 выключенный бонус не засчитан');
 eq(r3.total, 20, 'r3 итого только база 20');
 
+// БАГ-ФИКС: бонус НЕ засчитывается игроку, который взял 0 взяток (нечего было захватывать)
+var rz = S.roundScore({ bid: 0, tricks: 0, bonuses: { jolly: 1 } }, 3, defs);
+eq(rz.base, 30, 'rz база за угаданный ноль в р.3 = 30');
+eq(rz.bonusTotal, 0, 'rz бонус при 0 взятках НЕ засчитан');
+eq(rz.total, 30, 'rz итого только база 30 (не 50)');
+eq(rz.bonusesCounted, false, 'rz бонусы не засчитаны (0 взяток)');
+eq(rz.bonusesIgnored, true, 'rz помечает проигнорированный бонус');
+
+// при нулевой ставке БЕЗ ввода бонусов — предупреждения нет
+var rz2 = S.roundScore({ bid: 0, tricks: 0, bonuses: {} }, 3, defs);
+eq(rz2.total, 30, 'rz2 чистый ноль = 30');
+eq(rz2.bonusesIgnored, false, 'rz2 без бонусов — без предупреждения');
+
+// угадал ненулевую ставку и взял взятки — бонус засчитывается как и прежде
+var rp = S.roundScore({ bid: 2, tricks: 2, bonuses: { tile14: 1 } }, 5, defs);
+eq(rp.total, 50, 'rp 40 база + 10 бонус = 50 (взятки есть)');
+
 // тот же бонус, но включённый — считается
 var defsOn = defs.map(function (d) { return d.id === 'pir_mer' ? Object.assign({}, d, { enabled: true }) : d; });
 var r4 = S.roundScore({ bid: 1, tricks: 1, bonuses: { pir_mer: 2 } }, 5, defsOn);

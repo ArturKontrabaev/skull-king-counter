@@ -58,10 +58,13 @@
 
     var base = baseScore(bid, tricks, roundN);
     var matched = bidMatched(bid, tricks);
+    // Бонусы возможны ТОЛЬКО если игрок угадал ставку И реально выиграл хотя бы одну
+    // взятку — без выигранной взятки нечего было захватывать (14/пират/русалка/СК).
+    var bonusesEligible = matched && tricks > 0;
 
     var breakdown = [];
     var bonusTotal = 0;
-    if (matched) {
+    if (bonusesEligible) {
       bonusDefs.forEach(function (def) {
         if (!def.enabled) return;
         var count = bonuses[def.id] || 0;
@@ -72,18 +75,23 @@
       });
     }
 
-    // Были ли вообще введены бонусы (чтобы предупредить, что они не засчитаны при промахе)
+    // Были ли вообще введены бонусы (чтобы предупредить, что они не засчитаны)
     var hasBonusInput = bonusDefs.some(function (def) {
       return (bonuses[def.id] || 0) > 0;
     });
+    var ignoredReason = '';
+    if (!bonusesEligible && hasBonusInput) {
+      ignoredReason = !matched ? 'ставка не угадана' : 'нет выигранных взяток';
+    }
 
     return {
       base: base.points,
       baseReason: base.reason,
       bonusTotal: bonusTotal,
       bonusBreakdown: breakdown,
-      bonusesCounted: matched,
-      bonusesIgnored: !matched && hasBonusInput,
+      bonusesCounted: bonusesEligible,
+      bonusesIgnored: !bonusesEligible && hasBonusInput,
+      bonusesIgnoredReason: ignoredReason,
       total: base.points + bonusTotal,
     };
   }
