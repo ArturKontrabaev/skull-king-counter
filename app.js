@@ -131,6 +131,9 @@
     } catch (e) {}
     return null;
   }
+  function stripShareParam() {
+    try { if (window.history && history.replaceState && location.search) history.replaceState(null, '', location.pathname); } catch (e) {}
+  }
   function shareGame() {
     if (!state.game) return;
     var url = gameToLink(state.game);
@@ -242,6 +245,7 @@
       jset(LINEUP, setupSelected.slice());
       state.game = newGame(players);
       startRound(state.game, 1);
+      stripShareParam(); // новая партия — вычистить старую ссылку из адреса
       state.screen = 'game';
       save(); render(); window.scrollTo(0, 0);
     } }));
@@ -610,7 +614,8 @@
     if (!confirm('Начать новую партию? Текущая будет стёрта.')) return;
     try { localStorage.removeItem(STORE); } catch (e) {}
     state.game = null;
-    setupNames = [];
+    setupSelected = []; setupNewName = '';
+    stripShareParam(); // убрать ?s из адреса, чтобы старая партия не воскресла при перезагрузке
     state.screen = 'setup';
     render();
   }
@@ -638,15 +643,20 @@
   var imported = sParam ? linkToGame(sParam) : null;
   var local = load();
   if (imported) {
-    // пришли по ссылке-передаче. НЕ затираем ?s в адресе — чтобы «Открыть в Safari»
-    // (из встроенного браузера ТГ) донёс партию в настоящий браузер.
-    // Защита от обнуления: если локально уже есть ЭТА партия и она не старее
-    // присланной — продолжаем локальную (иначе перезагрузка сбрасывала бы прогресс).
-    if (local && local.id === imported.id && (local.rev || 0) >= (imported.rev || 0)) {
-      state.game = local;
-    } else {
+    var useImported = true;
+    if (local && local.id === imported.id) {
+      // та же партия — берём более свежую (защита от сброса при перезагрузке)
+      useImported = (imported.rev || 0) > (local.rev || 0);
+    } else if (local && local.id !== imported.id) {
+      // в адресе ссылка на ДРУГУЮ партию, а у нас уже идёт своя — спросить, не затирать молча
+      useImported = window.confirm('Открыть присланную партию? Текущая партия на этом телефоне будет заменена.');
+      if (!useImported) stripShareParam();
+    }
+    if (useImported) {
       state.game = imported;
       try { localStorage.setItem(STORE, JSON.stringify(state.game)); } catch (e) {}
+    } else {
+      state.game = local;
     }
     state.screen = 'game';
   } else if (local) {
