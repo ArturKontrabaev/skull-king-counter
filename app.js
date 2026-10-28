@@ -512,7 +512,7 @@
 
     // нижние действия: настройка бонусов + новая игра (явными кнопками)
     app.appendChild(el('div', { class: 'spacer' }));
-    app.appendChild(el('button', { class: 'btn ghost sm', text: '🔗 Скопировать ссылку на стол', onclick: copyTableLink }));
+    app.appendChild(el('button', { class: 'btn ghost sm', text: '📨 Пригласить (скопировать адрес)', onclick: copyTableLink }));
     app.appendChild(el('button', { class: 'btn ghost sm', text: '⚙️ Настройка бонусов', onclick: function () {
       state.screen = 'settings'; render(); window.scrollTo(0, 0);
     } }));
@@ -663,7 +663,7 @@
     app.appendChild(el('div', { class: 'winner', text: '🏆 Победил: ' + rows[0].name + ' (' + rows[0].score + ')' }));
     app.appendChild(renderLeaderboard(game, tot));
     app.appendChild(el('button', { class: 'btn ghost sm', text: '🗺️ Разбор по раундам', onclick: function () { state.screen = 'history'; render(); window.scrollTo(0, 0); } }));
-    app.appendChild(el('button', { class: 'btn ghost sm', text: '🔗 Скопировать ссылку на стол', onclick: copyTableLink }));
+    app.appendChild(el('button', { class: 'btn ghost sm', text: '📨 Пригласить (скопировать адрес)', onclick: copyTableLink }));
     app.appendChild(el('div', { class: 'spacer' }));
     app.appendChild(el('button', { class: 'btn gold', text: '🏴‍☠️ Новая партия', onclick: resetGame }));
   }
