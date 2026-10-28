@@ -68,7 +68,7 @@
       if (state.game) state.game.rev = (state.game.rev || 1) + 1; // монотонная версия
       localStorage.setItem(STORE, JSON.stringify(state.game));
     } catch (e) {}
-    cloudPush(); // если партия онлайн — отправить в облако (дебаунс)
+    cloudPushGame(); // общий стол — отправить партию в облако (дебаунс)
   }
   function load() {
     try {
@@ -83,17 +83,19 @@
     } catch (e) { return null; }
   }
 
-  // ---------- база игроков + архив партий (локально) ----------
-  var ROSTER = 'skullking_roster_v1';     // постоянные игроки [{id,name}]
-  var HISTORY = 'skullking_history_v1';   // завершённые партии (для статы)
-  var LINEUP = 'skullking_lineup_v1';     // последний состав (id в порядке)
+  // ---------- общая база игроков + архив партий (одна на всю компанию, в облаке) ----------
+  var LINEUP = 'skullking_lineup_v1';   // последний состав (локальная мелочь, не общая)
+  var CREW_STORE = 'skullking_crew_v1'; // локальное зеркало общей базы
+  var crew = { players: [], history: [] };
+  try { var _cm = JSON.parse(localStorage.getItem(CREW_STORE)); if (_cm) crew = { players: _cm.players || [], history: _cm.history || [] }; } catch (e) {}
+  function persistCrew() { try { localStorage.setItem(CREW_STORE, JSON.stringify(crew)); } catch (e) {} }
 
   function jget(key, def) { try { var v = JSON.parse(localStorage.getItem(key)); return v || def; } catch (e) { return def; } }
   function jset(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); } catch (e) {} }
-  function loadRoster() { return jget(ROSTER, []); }
-  function saveRoster(r) { jset(ROSTER, r); }
-  function loadHistory() { return jget(HISTORY, []); }
-  function saveHistory(h) { jset(HISTORY, h); }
+  function loadRoster() { return crew.players; }
+  function saveRoster(r) { crew.players = r; persistCrew(); cloudPushCrew(); }
+  function loadHistory() { return crew.history; }
+  function saveHistory(h) { crew.history = h; persistCrew(); cloudPushCrew(); }
 
   function archiveGame(game) {
     if (game.archived) return;
@@ -145,70 +147,75 @@
   function stripShareParam() {
     try { if (window.history && history.replaceState && location.search) history.replaceState(null, '', location.pathname); } catch (e) {}
   }
-  function shareGame() {
-    if (!state.game) return;
-    var url = gameToLink(state.game);
-    var msg = 'Ссылка на партию скопирована. Отправь её — кто откроет, продолжит с этого места.';
+  function copyTableLink() {
+    var url = location.origin + location.pathname;
+    var msg = 'Ссылка на общий стол скопирована. Кто откроет — видит и ведёт ту же партию и базу.';
     if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(url).then(function () { alert(msg); }, function () { window.prompt('Скопируй ссылку на партию:', url); });
+      navigator.clipboard.writeText(url).then(function () { alert(msg); }, function () { window.prompt('Ссылка на стол:', url); });
     } else {
-      window.prompt('Скопируй ссылку на партию:', url);
+      window.prompt('Ссылка на стол:', url);
     }
   }
 
-  // ---------- онлайн-стол (Supabase): все видят партию live ----------
-  var pushTimer = null, pollTimer = null;
+  // ---------- ЕДИНЫЙ ОБЩИЙ СТОЛ (Supabase) ----------
+  // Один адрес = одна текущая партия (id='current') + одна база (id='crew').
+  // Кто открыл ссылку — видит и редактирует одно и то же, всё синхронно.
+  var CURRENT_ID = 'current';
+  var CREW_ID = 'crew';
+  var gamePushTimer = null, crewPushTimer = null, pollTimer = null;
 
-  function cloudPushNow() {
-    var g = state.game;
-    if (!g || !g.cloud) return;
+  function cloudPushGameNow() {
+    if (!state.game) return;
     fetch(SUPA_URL + '/rest/v1/games', {
-      method: 'POST',
-      headers: supaHeaders({ 'Prefer': 'resolution=merge-duplicates' }),
-      body: JSON.stringify({ id: g.id, state: g }),
+      method: 'POST', headers: supaHeaders({ 'Prefer': 'resolution=merge-duplicates' }),
+      body: JSON.stringify({ id: CURRENT_ID, state: state.game }),
     }).catch(function () {});
   }
-  function cloudPush() {
-    if (!state.game || !state.game.cloud) return;
-    if (pushTimer) clearTimeout(pushTimer);
-    pushTimer = setTimeout(cloudPushNow, 800);
+  function cloudPushGame() { if (!state.game) return; if (gamePushTimer) clearTimeout(gamePushTimer); gamePushTimer = setTimeout(cloudPushGameNow, 700); }
+  function cloudPushCrewNow() {
+    fetch(SUPA_URL + '/rest/v1/rosters', {
+      method: 'POST', headers: supaHeaders({ 'Prefer': 'resolution=merge-duplicates' }),
+      body: JSON.stringify({ id: CREW_ID, data: crew }),
+    }).catch(function () {});
   }
-  function cloudFetch(id, cb) {
-    fetch(SUPA_URL + '/rest/v1/games?id=eq.' + encodeURIComponent(id) + '&select=state', { headers: supaHeaders() })
+  function cloudPushCrew() { if (crewPushTimer) clearTimeout(crewPushTimer); crewPushTimer = setTimeout(cloudPushCrewNow, 700); }
+
+  function cloudFetchGame(cb) {
+    fetch(SUPA_URL + '/rest/v1/games?id=eq.' + CURRENT_ID + '&select=state', { headers: supaHeaders() })
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (rows) { cb(rows && rows[0] ? rows[0].state : null); })
       .catch(function () { cb(null); });
   }
+  function cloudFetchCrew(cb) {
+    fetch(SUPA_URL + '/rest/v1/rosters?id=eq.' + CREW_ID + '&select=data', { headers: supaHeaders() })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (rows) { cb(rows && rows[0] ? rows[0].data : null); })
+      .catch(function () { cb(null); });
+  }
+
   function stopPolling() { if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } }
-  function startPolling() {
-    stopPolling();
-    if (!state.game || !state.game.cloud) return;
-    pollTimer = setInterval(function () {
-      if (!state.game || !state.game.cloud) { stopPolling(); return; }
-      cloudFetch(state.game.id, function (remote) {
+  function startPolling() { stopPolling(); pollTimer = setInterval(pollTick, 2500); }
+  function pollTick() {
+    // текущая партия (если мы в ней): подтянуть свежую/новую от других
+    if (state.game) {
+      cloudFetchGame(function (remote) {
         if (!remote) return;
-        if ((remote.rev || 0) > (state.game.rev || 0)) {
-          remote.cloud = true;
+        if (remote.id !== state.game.id || (remote.rev || 0) > (state.game.rev || 0)) {
           state.game = remote;
           try { localStorage.setItem(STORE, JSON.stringify(remote)); } catch (e) {}
-          render(); // подтянули более свежую версию от другого игрока
+          if (state.screen === 'game' || state.screen === 'history') render();
         }
       });
-    }, 2500);
-  }
-  function shareOnline() {
-    if (!state.game) return;
-    state.game.cloud = true;
-    save();          // зафиксировать cloud=true + запушить
-    cloudPushNow();  // и сразу, без дебаунса
-    startPolling();
-    var url = location.origin + location.pathname + '?g=' + encodeURIComponent(state.game.id);
-    var msg = 'Ссылка на онлайн-стол скопирована. Все, кто откроют, видят партию вживую и могут продолжать.';
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(url).then(function () { alert(msg); }, function () { window.prompt('Ссылка на онлайн-стол:', url); });
-    } else {
-      window.prompt('Ссылка на онлайн-стол:', url);
     }
+    // общая база/статы
+    cloudFetchCrew(function (data) {
+      if (!data) return;
+      if (JSON.stringify(data) !== JSON.stringify(crew)) {
+        crew = { players: data.players || [], history: data.history || [] };
+        persistCrew();
+        if (state.screen === 'setup' || state.screen === 'players') render();
+      }
+    });
   }
 
   // ---------- helpers ----------
@@ -420,7 +427,7 @@
         el('div', { class: 'cards', text: round.n + ' ' + plural(round.n, ['карта', 'карты', 'карт']) + ' на руках' }),
         dealer ? el('div', { class: 'dealer tappable', text: '🎲 раздаёт: ' + dealer.name + ' · сменить ▸',
           onclick: function () { game.dealerStart = ((game.dealerStart || 0) + 1) % game.players.length; save(); render(); } }) : null,
-        game.cloud ? el('div', { class: 'online', text: '🌐 онлайн-стол · обновляется live' }) : null,
+        el('div', { class: 'online', text: '🌐 общий стол · обновляется live' }),
       ]),
       el('span', { class: 'phase-pill', text: round.phase === 'bids' ? 'СТАВКИ' : 'ВЗЯТКИ' }),
     ]));
@@ -467,10 +474,7 @@
 
     // нижние действия: настройка бонусов + новая игра (явными кнопками)
     app.appendChild(el('div', { class: 'spacer' }));
-    app.appendChild(el('button', { class: 'btn' + (game.cloud ? ' ghost sm' : ' gold'),
-      text: game.cloud ? '🌐 Онлайн-стол активен — скопировать ссылку' : '🌐 Открыть онлайн-стол (все видят live)',
-      onclick: shareOnline }));
-    app.appendChild(el('button', { class: 'btn ghost sm', text: '🔗 Передать копию (без интернета)', onclick: shareGame }));
+    app.appendChild(el('button', { class: 'btn ghost sm', text: '🔗 Скопировать ссылку на стол', onclick: copyTableLink }));
     app.appendChild(el('button', { class: 'btn ghost sm', text: '⚙️ Настройка бонусов', onclick: function () {
       state.screen = 'settings'; render(); window.scrollTo(0, 0);
     } }));
@@ -621,7 +625,7 @@
     app.appendChild(el('div', { class: 'winner', text: '🏆 Победил: ' + rows[0].name + ' (' + rows[0].score + ')' }));
     app.appendChild(renderLeaderboard(game, tot));
     app.appendChild(el('button', { class: 'btn ghost sm', text: '🗺️ Разбор по раундам', onclick: function () { state.screen = 'history'; render(); window.scrollTo(0, 0); } }));
-    app.appendChild(el('button', { class: 'btn ghost sm', text: '🔗 Передать игру (ссылка)', onclick: shareGame }));
+    app.appendChild(el('button', { class: 'btn ghost sm', text: '🔗 Скопировать ссылку на стол', onclick: copyTableLink }));
     app.appendChild(el('div', { class: 'spacer' }));
     app.appendChild(el('button', { class: 'btn gold', text: '🏴‍☠️ Новая партия', onclick: resetGame }));
   }
@@ -708,7 +712,6 @@
 
   function resetGame() {
     if (!confirm('Начать новую партию? Текущая будет стёрта.')) return;
-    stopPolling(); // остановить облачный синк прошлой партии
     try { localStorage.removeItem(STORE); } catch (e) {}
     state.game = null;
     setupSelected = []; setupNewName = '';
@@ -736,36 +739,25 @@
   });
 
   // ---------- старт ----------
-  var params = new URLSearchParams(location.search);
-  var gParam = params.get('g'); // онлайн-стол (Supabase)
-  var sParam = params.get('s'); // снапшот-ссылка (без сервера)
+  // Единый общий стол: сразу показываем локальное зеркало, затем подтягиваем из облака.
   var local = load();
+  if (local) { state.game = local; state.screen = 'game'; }
+  render();
 
-  if (gParam) {
-    // онлайн-стол: тянем партию из облака и подписываемся на обновления
-    app.innerHTML = '<div class="card muted">⏳ Загружаю онлайн-стол…</div>';
-    cloudFetch(gParam, function (remote) {
-      if (remote) {
-        remote.cloud = true;
-        state.game = remote; state.screen = 'game';
-        try { localStorage.setItem(STORE, JSON.stringify(remote)); } catch (e) {}
-        startPolling();
-      } else {
-        alert('Онлайн-партия не найдена (возможно, ссылка устарела).');
-        state.screen = 'setup';
-      }
+  cloudFetchGame(function (remote) {
+    if (!remote) return;
+    if (!state.game || remote.id !== state.game.id || (remote.rev || 0) >= (state.game.rev || 0)) {
+      state.game = remote; state.screen = 'game';
+      try { localStorage.setItem(STORE, JSON.stringify(remote)); } catch (e) {}
       render();
-    });
-  } else {
-    // снапшот-ссылка: загружаем ТОЛЬКО если локальной партии нет (без диалогов —
-    // чтобы не подвешивать и не воскрешать чужую поверх текущей)
-    var imported = sParam ? linkToGame(sParam) : null;
-    if (imported && !local) {
-      state.game = imported; state.screen = 'game';
-      try { localStorage.setItem(STORE, JSON.stringify(imported)); } catch (e) {}
-    } else if (local) {
-      state.game = local; state.screen = 'game';
     }
-    render();
-  }
+  });
+  cloudFetchCrew(function (data) {
+    if (data) {
+      crew = { players: data.players || [], history: data.history || [] };
+      persistCrew();
+      if (state.screen === 'setup' || state.screen === 'players') render();
+    }
+  });
+  startPolling();
 })();
