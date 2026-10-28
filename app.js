@@ -22,6 +22,8 @@
 
   function newGame(players) {
     return {
+      id: 'g' + uid(),       // id партии (для сверки при импорте по ссылке)
+      rev: 1,                // версия (растёт при каждом сохранении)
       players: players, // [{id,name}]
       bonuses: cloneBonuses(),
       rounds: [], // заполняется по ходу
@@ -52,7 +54,10 @@
 
   // ---------- хранение ----------
   function save() {
-    try { localStorage.setItem(STORE, JSON.stringify(state.game)); } catch (e) {}
+    try {
+      if (state.game) state.game.rev = (state.game.rev || 1) + 1; // монотонная версия
+      localStorage.setItem(STORE, JSON.stringify(state.game));
+    } catch (e) {}
   }
   function load() {
     try {
@@ -61,6 +66,8 @@
       var g = JSON.parse(raw);
       if (!g || !g.players) return null;
       if (!g.bonuses) g.bonuses = cloneBonuses();
+      if (!g.id) g.id = 'g' + uid();
+      if (!g.rev) g.rev = 1;
       return g;
     } catch (e) { return null; }
   }
@@ -115,7 +122,12 @@
     try {
       var b64 = s.replace(/-/g, '+').replace(/_/g, '/');
       var g = JSON.parse(decodeURIComponent(escape(atob(b64))));
-      if (g && g.players) { if (!g.bonuses) g.bonuses = cloneBonuses(); return g; }
+      if (g && g.players) {
+        if (!g.bonuses) g.bonuses = cloneBonuses();
+        if (!g.id) g.id = 'g' + uid();
+        if (!g.rev) g.rev = 1;
+        return g;
+      }
     } catch (e) {}
     return null;
   }
@@ -602,13 +614,21 @@
   // ---------- старт ----------
   var sParam = (new URLSearchParams(location.search)).get('s');
   var imported = sParam ? linkToGame(sParam) : null;
+  var local = load();
   if (imported) {
-    // пришли по ссылке-передаче — загружаем переданную партию и продолжаем
-    state.game = imported; state.screen = 'game'; save();
-    if (window.history && history.replaceState) history.replaceState(null, '', location.pathname);
-  } else {
-    var saved = load();
-    if (saved) { state.game = saved; state.screen = 'game'; }
+    // пришли по ссылке-передаче. НЕ затираем ?s в адресе — чтобы «Открыть в Safari»
+    // (из встроенного браузера ТГ) донёс партию в настоящий браузер.
+    // Защита от обнуления: если локально уже есть ЭТА партия и она не старее
+    // присланной — продолжаем локальную (иначе перезагрузка сбрасывала бы прогресс).
+    if (local && local.id === imported.id && (local.rev || 0) >= (imported.rev || 0)) {
+      state.game = local;
+    } else {
+      state.game = imported;
+      try { localStorage.setItem(STORE, JSON.stringify(state.game)); } catch (e) {}
+    }
+    state.screen = 'game';
+  } else if (local) {
+    state.game = local; state.screen = 'game';
   }
   render();
 })();
