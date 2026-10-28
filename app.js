@@ -15,6 +15,22 @@
     return h;
   }
 
+  // метка устройства (без регистрации) — для режима «ведущий / просмотр»
+  var DEVICE_ID = (function () {
+    try {
+      var k = 'skullking_device', v = localStorage.getItem(k);
+      if (!v) { v = 'd' + Math.random().toString(36).slice(2, 10); localStorage.setItem(k, v); }
+      return v;
+    } catch (e) { return 'd' + Math.random().toString(36).slice(2, 10); }
+  })();
+  // редактировать может: если ведущий не назначен (старые партии) ИЛИ это наше устройство
+  function canEdit() { return !state.game || !state.game.controllerId || state.game.controllerId === DEVICE_ID; }
+  function takeControl() {
+    if (!state.game) return;
+    state.game.controllerId = DEVICE_ID;
+    save(); render();
+  }
+
   // ---------- состояние ----------
   var state = {
     screen: 'setup', // 'setup' | 'game' | 'history' | 'settings' | 'edit'
@@ -40,6 +56,7 @@
       finished: false,
       archived: false,
       dealerStart: players.length ? Math.floor(Math.random() * players.length) : 0,
+      controllerId: DEVICE_ID, // кто ведёт счёт (создатель партии)
     };
   }
 
@@ -456,6 +473,7 @@
     if (game.finished) return renderFinished();
     var round = currentRound(game);
     var tot = Scoring.totals(game);
+    var ro = !canEdit(); // режим просмотра (не ведущий)
 
     // шапка раунда
     var dealer = dealerForRound(game, round.n);
@@ -463,16 +481,18 @@
       el('div', {}, [
         el('span', { class: 'rnum', text: 'Раунд ' + round.n }),
         el('div', { class: 'cards', text: round.n + ' ' + plural(round.n, ['карта', 'карты', 'карт']) + ' на руках' }),
-        dealer ? el('div', { class: 'dealer tappable', text: '🎲 раздаёт: ' + dealer.name + ' · сменить ▸',
-          onclick: function () { game.dealerStart = ((game.dealerStart || 0) + 1) % game.players.length; save(); render(); } }) : null,
-        el('div', { class: 'online', text: '🌐 общий стол · обновляется live' }),
+        dealer ? (ro
+          ? el('div', { class: 'dealer', text: '🎲 раздаёт: ' + dealer.name })
+          : el('div', { class: 'dealer tappable', text: '🎲 раздаёт: ' + dealer.name + ' · сменить ▸',
+              onclick: function () { game.dealerStart = ((game.dealerStart || 0) + 1) % game.players.length; save(); render(); } })) : null,
+        el('div', { class: 'online', text: ro ? '🌐 общий стол · 👀 просмотр' : '🌐 общий стол · ✍️ вы ведёте счёт' }),
       ]),
       el('span', { class: 'phase-pill', text: round.phase === 'bids' ? 'СТАВКИ' : 'ВЗЯТКИ' }),
     ]));
 
     var card = el('div', { class: 'card' });
     game.players.forEach(function (p) {
-      card.appendChild(renderPlayerInRound(game, round, p, tot[p.id], round.phase));
+      card.appendChild(renderPlayerInRound(game, round, p, tot[p.id], round.phase, ro));
     });
     app.appendChild(card);
 
@@ -486,9 +506,12 @@
       }
     }
 
-    // кнопка перехода
+    // кнопка перехода / режим просмотра
     var cta = el('div', { class: 'sticky-cta' });
-    if (round.phase === 'bids') {
+    if (ro) {
+      cta.appendChild(el('div', { class: 'card', html: '<span class="muted">👀 Режим просмотра — счёт ведёт другой игрок. Обновляется автоматически.</span>' }));
+      cta.appendChild(el('button', { class: 'btn', text: '✋ Взять ведение', onclick: takeControl }));
+    } else if (round.phase === 'bids') {
       cta.appendChild(el('button', { class: 'btn', text: 'Раунд сыгран →', onclick: function () {
         round.phase = 'tricks'; save(); render();
       } }));
@@ -510,16 +533,18 @@
     app.appendChild(el('h2', { class: 'screen-title', text: 'Общий счёт' }));
     app.appendChild(renderLeaderboard(game, tot));
 
-    // нижние действия: настройка бонусов + новая игра (явными кнопками)
+    // нижние действия
     app.appendChild(el('div', { class: 'spacer' }));
     app.appendChild(el('button', { class: 'btn ghost sm', text: '📨 Пригласить (скопировать адрес)', onclick: copyTableLink }));
-    app.appendChild(el('button', { class: 'btn ghost sm', text: '⚙️ Настройка бонусов', onclick: function () {
-      state.screen = 'settings'; render(); window.scrollTo(0, 0);
-    } }));
-    app.appendChild(el('button', { class: 'btn ghost sm', text: '🔄 Новая игра', onclick: resetGame }));
+    if (!ro) {
+      app.appendChild(el('button', { class: 'btn ghost sm', text: '⚙️ Настройка бонусов', onclick: function () {
+        state.screen = 'settings'; render(); window.scrollTo(0, 0);
+      } }));
+      app.appendChild(el('button', { class: 'btn ghost sm', text: '🔄 Новая игра', onclick: resetGame }));
+    }
   }
 
-  function renderPlayerInRound(game, round, player, totalScore, mode) {
+  function renderPlayerInRound(game, round, player, totalScore, mode, readonly) {
     var entry = round.entries[player.id];
     var block = el('div', { class: 'pscore' });
 
@@ -533,7 +558,7 @@
 
     if (showBid) {
       block.appendChild(el('div', { class: 'field-label', text: 'Ставка (0…' + round.n + ')' }));
-      block.appendChild(stepper(entry.bid, 0, round.n, function (v) { entry.bid = v; save(); render(); }));
+      block.appendChild(stepper(entry.bid, 0, round.n, function (v) { entry.bid = v; save(); render(); }, readonly));
     }
 
     if (showTricks) {
@@ -541,12 +566,12 @@
         ? 'Взял взяток (0…' + round.n + ')'
         : 'Ставил ' + entry.bid + ' · взял (0…' + round.n + ')';
       block.appendChild(el('div', { class: 'field-label', text: tlabel }));
-      block.appendChild(stepper(entry.tricks, 0, round.n, function (v) { entry.tricks = v; save(); render(); }));
+      block.appendChild(stepper(entry.tricks, 0, round.n, function (v) { entry.tricks = v; save(); render(); }, readonly));
 
       // бонусы — только включённые И только если игрок реально взял ≥1 взятку
-      // (без выигранной взятки нечего захватывать → бонус невозможен)
+      // (в режиме просмотра чипы не показываем — бонусы видны в расшифровке ниже)
       var enabled = game.bonuses.filter(function (b) { return b.enabled; });
-      if (enabled.length && entry.tricks > 0) {
+      if (!readonly && enabled.length && entry.tricks > 0) {
         var wrap = el('div', { class: 'bonuses' });
         enabled.forEach(function (b) {
           var cnt = entry.bonuses[b.id] || 0;
@@ -627,7 +652,8 @@
   }
 
   // ---------- stepper ----------
-  function stepper(value, min, max, onchange) {
+  function stepper(value, min, max, onchange, readonly) {
+    if (readonly) return el('div', { class: 'stepper' }, [ el('div', { class: 'val', text: String(value) }) ]);
     var minus = el('button', { text: '−', onclick: function () { if (value > min) onchange(value - 1); } });
     var plus = el('button', { text: '+', onclick: function () { if (value < max) onchange(value + 1); } });
     if (value <= min) minus.disabled = true;
@@ -665,7 +691,11 @@
     app.appendChild(el('button', { class: 'btn ghost sm', text: '🗺️ Разбор по раундам', onclick: function () { state.screen = 'history'; render(); window.scrollTo(0, 0); } }));
     app.appendChild(el('button', { class: 'btn ghost sm', text: '📨 Пригласить (скопировать адрес)', onclick: copyTableLink }));
     app.appendChild(el('div', { class: 'spacer' }));
-    app.appendChild(el('button', { class: 'btn gold', text: '🏴‍☠️ Новая партия', onclick: resetGame }));
+    if (canEdit()) {
+      app.appendChild(el('button', { class: 'btn gold', text: '🏴‍☠️ Новая партия', onclick: resetGame }));
+    } else {
+      app.appendChild(el('button', { class: 'btn', text: '✋ Взять ведение', onclick: takeControl }));
+    }
   }
 
   // ---------- экран: история ----------
@@ -696,9 +726,11 @@
             el('span', { class: 'hs', text: (r.total > 0 ? '+' : '') + r.total }),
           ]));
         });
-        det.appendChild(el('button', { class: 'btn ghost sm', text: '✏️ Редактировать раунд ' + round.n, onclick: function () {
-          state.editingRoundIndex = idx; state.screen = 'edit'; render(); window.scrollTo(0, 0);
-        } }));
+        if (canEdit()) {
+          det.appendChild(el('button', { class: 'btn ghost sm', text: '✏️ Редактировать раунд ' + round.n, onclick: function () {
+            state.editingRoundIndex = idx; state.screen = 'edit'; render(); window.scrollTo(0, 0);
+          } }));
+        }
         app.appendChild(det);
       });
     }
