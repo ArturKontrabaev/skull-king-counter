@@ -266,3 +266,5 @@ main { padding: 8px 10px 24px; }
 .sel-wrap { margin-top: 2px; gap: 5px; }
 .sel-lbl { width: 36px; }
 .selbtn { min-width: 28px; height: 28px; font-size: 13px; border-radius: 6px; }
+
+.hrow .hs { white-space: nowrap; }

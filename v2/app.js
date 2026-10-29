@@ -781,7 +781,14 @@
     var who = historyFilter ? game.players.filter(function (p) { return p.id === historyFilter; }) : game.players;
     var runTotal = {}; who.forEach(function (p) { runTotal[p.id] = 0; });
 
-    played.forEach(function (o) { // по возрастанию раундов (нарастающий итог логичнее)
+    // при фильтре по игроку — его текущий счёт сверху
+    if (historyFilter && who[0]) {
+      var curTot = Scoring.totals(game)[historyFilter] || 0;
+      app.appendChild(el('div', { class: 'card', html:
+        '<b>' + esc(who[0].name) + '</b> — сейчас: <b class="row-sum ' + (curTot >= 0 ? 'pos' : 'neg') + '">' + curTot + '</b>' }));
+    }
+
+    played.forEach(function (o) { // по возрастанию раундов (нарастающий итог)
       var round = o.round, idx = o.idx;
       var cardEl = el('div', { class: 'card hround-open' });
       cardEl.appendChild(el('div', { class: 'hround-head' }, [
@@ -796,7 +803,7 @@
         cardEl.appendChild(el('div', { class: 'hrow' }, [
           el('span', { class: 'hn', text: p.name }),
           el('span', { class: 'hwhy', text: why }),
-          el('span', { class: 'hs', text: (r.total > 0 ? '+' : '') + r.total + (historyFilter ? ' (' + runTotal[p.id] + ')' : '') }),
+          el('span', { class: 'hs', text: (r.total > 0 ? '+' : '') + r.total + ' · ∑' + runTotal[p.id] }),
         ]));
       });
       if (canEdit()) {
