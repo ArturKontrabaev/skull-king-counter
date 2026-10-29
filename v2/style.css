@@ -254,3 +254,15 @@ main { padding: 8px 10px 24px; }
 .sticky-cta { padding: 8px 0 calc(8px + env(safe-area-inset-bottom)); }
 .btn { min-height: 46px; font-size: 16px; }
 .btn.sm { min-height: 36px; }
+
+/* ===================== v2.2: очки за раунд в строке имени, ещё плотнее ===================== */
+.pname-row { display: flex; align-items: baseline; gap: 8px; }
+.pname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row-sum { font-weight: 800; font-size: 15px; font-variant-numeric: tabular-nums; flex: none; }
+.row-sum.pos { color: var(--green); }
+.row-sum.neg { color: var(--red); }
+.ptotal { font-size: 11px; color: var(--muted); flex: none; min-width: 34px; text-align: right; }
+.pscore { padding-top: 5px; margin-top: 5px; }
+.sel-wrap { margin-top: 2px; gap: 5px; }
+.sel-lbl { width: 36px; }
+.selbtn { min-width: 28px; height: 28px; font-size: 13px; border-radius: 6px; }

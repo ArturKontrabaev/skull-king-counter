@@ -681,9 +681,12 @@
   function renderPlayerRowV2(game, round, player, totalScore, readonly) {
     var entry = round.entries[player.id];
     var block = el('div', { class: 'pscore' });
+    var rr = Scoring.roundScore(entry, round.n, game.bonuses);
+    var rcls = rr.total > 0 ? 'pos' : (rr.total < 0 ? 'neg' : '');
     block.appendChild(el('div', { class: 'pname-row' }, [
       el('span', { class: 'pname', text: player.name }),
-      el('span', { class: 'ptotal', text: 'всего: ' + totalScore }),
+      el('span', { class: 'row-sum ' + rcls, text: (rr.total > 0 ? '+' : '') + rr.total }),
+      el('span', { class: 'ptotal', text: '∑' + totalScore }),
     ]));
     block.appendChild(el('div', { class: 'sel-wrap' }, [
       el('span', { class: 'sel-lbl', text: 'ставка' }),
@@ -711,7 +714,6 @@
       });
       block.appendChild(wrap);
     }
-    block.appendChild(resultLine(Scoring.roundScore(entry, round.n, game.bonuses)));
     return block;
   }
 
