@@ -145,14 +145,23 @@
   }
 
   function playerStats(id) {
-    var games = 0, wins = 0, sum = 0, best = null;
+    var games = 0, wins = 0, sum = 0, best = null, placeSum = 0;
     loadHistory().forEach(function (g) {
       if (!g.scores || !(id in g.scores)) return;
       games++; var s = g.scores[id]; sum += s;
       if (best === null || s > best) best = s;
       if (g.winnerId === id) wins++;
+      // место = сколько игроков набрали строго больше, +1
+      var higher = 0; for (var pid in g.scores) { if (g.scores[pid] > s) higher++; }
+      placeSum += higher + 1;
     });
-    return { games: games, wins: wins, avg: games ? Math.round(sum / games) : 0, best: best === null ? 0 : best };
+    return {
+      games: games, wins: wins,
+      avg: games ? Math.round(sum / games) : 0,
+      best: best === null ? 0 : best,
+      avgPlace: games ? placeSum / games : 0,
+      winRate: games ? Math.round(100 * wins / games) : 0,
+    };
   }
 
   // ---------- передача партии ссылкой (без сервера: состояние зашито в URL) ----------
@@ -445,8 +454,9 @@
               var r = loadRoster(); r.splice(i, 1); saveRoster(r); render();
             } }),
           ]),
-          el('div', { class: 'why', html: 'партий: <b>' + st.games + '</b> · побед: <b>' + st.wins +
-            '</b> · ср. счёт: <b>' + st.avg + '</b> · рекорд: <b>' + st.best + '</b>' }),
+          el('div', { class: 'why', html: 'партий: <b>' + st.games + '</b> · побед: <b>' + st.wins + '</b> (' + st.winRate +
+            '%) · ср. место: <b>' + (st.games ? st.avgPlace.toFixed(1) : '—') + '</b> · ср. счёт: <b>' + st.avg +
+            '</b> · рекорд: <b>' + st.best + '</b>' }),
         ]));
       });
       app.appendChild(card);
@@ -689,7 +699,7 @@
     block.appendChild(el('div', { class: 'pname-row' }, [
       el('span', { class: 'pname', text: flag(player.name) }),
       el('span', { class: 'row-sum ' + rcls, text: (rr.total > 0 ? '+' : '') + rr.total }),
-      el('span', { class: 'ptotal', text: '∑' + totalScore }),
+      el('span', { class: 'ptotal', text: 'итого ' + totalScore }),
     ]));
     block.appendChild(el('div', { class: 'sel-wrap' }, [
       el('span', { class: 'sel-lbl', text: 'ставка' }),
