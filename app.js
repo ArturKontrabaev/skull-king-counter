@@ -523,6 +523,12 @@
         else { startRound(game, round.n + 1); }
         save(); render(); window.scrollTo(0, 0);
       } }));
+      if (!last) {
+        cta.appendChild(el('button', { class: 'btn ghost sm', text: '🏁 Завершить партию на этом раунде', onclick: function () {
+          if (!confirm('Завершить партию на раунде ' + round.n + '?')) return;
+          round.phase = 'done'; game.finished = true; archiveGame(game); save(); render(); window.scrollTo(0, 0);
+        } }));
+      }
       cta.appendChild(el('button', { class: 'btn ghost sm', text: '← Вернуться к ставкам', onclick: function () {
         round.phase = 'bids'; save(); render();
       } }));

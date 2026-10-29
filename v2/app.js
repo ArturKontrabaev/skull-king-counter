@@ -539,6 +539,12 @@
         else { startRound(game, round.n + 1); }
         save(); render(); window.scrollTo(0, 0);
       } }));
+      if (!last) {
+        cta.appendChild(el('button', { class: 'btn ghost sm', text: '🏁 Завершить партию на этом раунде', onclick: function () {
+          if (!confirm('Завершить партию на раунде ' + round.n + '? (например, карт не хватает на дальше)')) return;
+          round.phase = 'done'; game.finished = true; archiveGame(game); save(); render(); window.scrollTo(0, 0);
+        } }));
+      }
     }
     app.appendChild(cta);
 
