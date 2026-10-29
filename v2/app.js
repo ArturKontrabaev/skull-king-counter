@@ -295,6 +295,8 @@
     return e;
   }
   function esc(s) { return String(s).replace(/[&<>]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]; }); }
+  // батя в здании 🏴‍☠️
+  function flag(name) { return (name || '').trim().toLowerCase() === 'артур' ? name + ' 🏴‍☠️' : name; }
 
   var app = document.getElementById('app');
   function render() {
@@ -372,7 +374,7 @@
         }, [
           el('span', { class: 'drag', text: '≡' }),
           el('span', { class: 'pick-box', text: String(i + 1) }),
-          el('span', { class: 'pick-name', text: nameById[id] }),
+          el('span', { class: 'pick-name', text: flag(nameById[id]) }),
           up, dn,
         ]);
         ord.appendChild(row);
@@ -549,7 +551,7 @@
     var block = el('div', { class: 'pscore' });
 
     block.appendChild(el('div', { class: 'pname-row' }, [
-      el('span', { class: 'pname', text: player.name }),
+      el('span', { class: 'pname', text: flag(player.name) }),
       el('span', { class: 'ptotal', text: 'всего: ' + totalScore }),
     ]));
 
@@ -685,7 +687,7 @@
     var rr = Scoring.roundScore(entry, round.n, game.bonuses);
     var rcls = rr.total > 0 ? 'pos' : (rr.total < 0 ? 'neg' : '');
     block.appendChild(el('div', { class: 'pname-row' }, [
-      el('span', { class: 'pname', text: player.name }),
+      el('span', { class: 'pname', text: flag(player.name) }),
       el('span', { class: 'row-sum ' + rcls, text: (rr.total > 0 ? '+' : '') + rr.total }),
       el('span', { class: 'ptotal', text: '∑' + totalScore }),
     ]));
@@ -726,7 +728,7 @@
     rows.forEach(function (row, i) {
       card.appendChild(el('div', { class: 'lb-row' + (i === 0 ? ' first' : '') }, [
         el('span', { class: 'lb-rank', text: i === 0 ? '👑' : String(i + 1) }),
-        el('span', { class: 'lb-name', text: row.name }),
+        el('span', { class: 'lb-name', text: flag(row.name) }),
         el('span', { class: 'lb-score', text: String(row.score) }),
       ]));
     });
@@ -802,7 +804,7 @@
         r.bonusBreakdown.forEach(function (b) { why += '; ' + b.label + (b.count > 1 ? ' ×' + b.count : '') + ' +' + b.sum; });
         var dcls = r.total > 0 ? 'pos' : (r.total < 0 ? 'neg' : 'zero');
         cardEl.appendChild(el('div', { class: 'hrow' }, [
-          el('span', { class: 'hn', text: p.name }),
+          el('span', { class: 'hn', text: flag(p.name) }),
           el('span', { class: 'hwhy', text: why }),
           el('span', { class: 'hs', html:
             '<span class="hd ' + dcls + '">' + (r.total > 0 ? '+' : '') + r.total + '</span>' +
