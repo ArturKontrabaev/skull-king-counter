@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="110" fill="#0f1b2d"/>
+  <g fill="#f5c542">
+    <!-- череп -->
+    <path d="M256 104c-74 0-134 55-134 128 0 42 22 72 48 90v34c0 15 12 28 28 28h12v-30h16v30h28v-30h16v30h12c16 0 28-13 28-28v-34c26-18 48-48 48-90 0-73-60-128-134-128z"/>
+    <circle cx="206" cy="236" r="30" fill="#0f1b2d"/>
+    <circle cx="306" cy="236" r="30" fill="#0f1b2d"/>
+    <path d="M256 286l-18 40h36z" fill="#0f1b2d"/>
+  </g>
+</svg>
