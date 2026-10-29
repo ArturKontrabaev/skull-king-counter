@@ -800,10 +800,13 @@
         runTotal[p.id] += r.total;
         var why = r.baseReason;
         r.bonusBreakdown.forEach(function (b) { why += '; ' + b.label + (b.count > 1 ? ' ×' + b.count : '') + ' +' + b.sum; });
+        var dcls = r.total > 0 ? 'pos' : (r.total < 0 ? 'neg' : 'zero');
         cardEl.appendChild(el('div', { class: 'hrow' }, [
           el('span', { class: 'hn', text: p.name }),
           el('span', { class: 'hwhy', text: why }),
-          el('span', { class: 'hs', text: (r.total > 0 ? '+' : '') + r.total + ' · ∑' + runTotal[p.id] }),
+          el('span', { class: 'hs', html:
+            '<span class="hd ' + dcls + '">' + (r.total > 0 ? '+' : '') + r.total + '</span>' +
+            '<span class="ht">' + runTotal[p.id] + '</span>' }),
         ]));
       });
       if (canEdit()) {

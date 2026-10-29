@@ -268,3 +268,11 @@ main { padding: 8px 10px 24px; }
 .selbtn { min-width: 28px; height: 28px; font-size: 13px; border-radius: 6px; }
 
 .hrow .hs { white-space: nowrap; }
+
+/* история: за раунд (цвет по знаку) + нарастающий итог (золотой, ключевой) */
+.hrow .hs { display: inline-flex; align-items: baseline; gap: 8px; white-space: nowrap; }
+.hs .hd { font-size: 12px; font-variant-numeric: tabular-nums; }
+.hs .hd.pos { color: var(--green); }
+.hs .hd.neg { color: var(--red); }
+.hs .hd.zero { color: var(--muted); }
+.hs .ht { font-size: 16px; font-weight: 800; color: var(--gold); font-variant-numeric: tabular-nums; min-width: 30px; text-align: right; }
