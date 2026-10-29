@@ -568,10 +568,10 @@
       block.appendChild(el('div', { class: 'field-label', text: tlabel }));
       block.appendChild(stepper(entry.tricks, 0, round.n, function (v) { entry.tricks = v; save(); render(); }, readonly));
 
-      // бонусы — только включённые И только если игрок реально взял ≥1 взятку
+      // бонусы — только если угадал ставку (bid==tricks) И взял ≥1 взятку
       // (в режиме просмотра чипы не показываем — бонусы видны в расшифровке ниже)
       var enabled = game.bonuses.filter(function (b) { return b.enabled; });
-      if (!readonly && enabled.length && entry.tricks > 0) {
+      if (!readonly && enabled.length && entry.tricks > 0 && entry.bid === entry.tricks) {
         var wrap = el('div', { class: 'bonuses' });
         enabled.forEach(function (b) {
           var cnt = entry.bonuses[b.id] || 0;

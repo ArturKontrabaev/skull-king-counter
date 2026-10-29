@@ -696,9 +696,9 @@
       el('span', { class: 'sel-lbl', text: 'взял' }),
       selector(entry.tricks, round.n, function (v) { entry.tricks = v; save(); render(); }, readonly),
     ]));
-    // бонусы — только при ≥1 взятке и не в просмотре
+    // бонусы — только если угадал ставку (bid==tricks) И взял ≥1 взятку, и не в просмотре
     var enabled = game.bonuses.filter(function (b) { return b.enabled; });
-    if (!readonly && enabled.length && entry.tricks > 0) {
+    if (!readonly && enabled.length && entry.tricks > 0 && entry.bid === entry.tricks) {
       var wrap = el('div', { class: 'bonuses' });
       enabled.forEach(function (b) {
         var cnt = entry.bonuses[b.id] || 0;
