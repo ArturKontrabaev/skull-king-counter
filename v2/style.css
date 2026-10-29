@@ -226,3 +226,31 @@ main { padding: 10px 10px 28px; }
 .hround-open { padding: 10px 12px; }
 .hround-head { display: flex; justify-content: space-between; align-items: baseline; font-weight: 700; margin-bottom: 6px; }
 .hrn { font-size: 15px; }
+
+/* ===================== v2.1: ещё компактнее (больше игроков на экран) ===================== */
+html, body { font-size: 14px; }
+.topbar { padding: calc(5px + env(safe-area-inset-top)) 10px 5px; }
+.brand { font-size: 16px; }
+.icon-btn { width: 38px; height: 38px; font-size: 18px; }
+main { padding: 8px 10px 24px; }
+.card { padding: 8px 10px; margin-bottom: 8px; }
+.round-head { margin-bottom: 6px; }
+.round-head .rnum { font-size: 17px; }
+.round-head .cards, .round-head .dealer, .round-head .online { font-size: 11px; }
+.pscore { padding-top: 6px; margin-top: 6px; }
+.pname-row { margin-bottom: 2px; }
+.pname { font-size: 14px; }
+.ptotal { font-size: 11px; }
+.sel-wrap { gap: 6px; margin-top: 3px; }
+.sel-lbl { width: 40px; font-size: 11px; }
+.selrow { gap: 4px; }
+.selbtn { min-width: 30px; height: 30px; font-size: 14px; border-radius: 7px; }
+.result { margin-top: 3px; font-size: 12px; }
+.result .sum { font-size: 15px; }
+.result .why { font-size: 11px; margin-top: 1px; line-height: 1.35; }
+.bonuses { margin-top: 4px; gap: 5px; }
+.chip { padding: 4px 7px; font-size: 11px; }
+.chip .dec { font-size: 15px; }
+.sticky-cta { padding: 8px 0 calc(8px + env(safe-area-inset-bottom)); }
+.btn { min-height: 46px; font-size: 16px; }
+.btn.sm { min-height: 36px; }
