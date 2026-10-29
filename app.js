@@ -671,9 +671,11 @@
     var rows = game.players.map(function (p) { return { name: p.name, score: tot[p.id] || 0 }; });
     rows.sort(function (a, b) { return b.score - a.score; });
     var card = el('div', { class: 'card lb' });
-    rows.forEach(function (row, i) {
-      card.appendChild(el('div', { class: 'lb-row' + (i === 0 ? ' first' : '') }, [
-        el('span', { class: 'lb-rank', text: i === 0 ? '👑' : String(i + 1) }),
+    rows.forEach(function (row) {
+      // одинаковые очки — одинаковое место (1,1,3): место = сколько строго выше, +1
+      var place = rows.filter(function (r) { return r.score > row.score; }).length + 1;
+      card.appendChild(el('div', { class: 'lb-row' + (place === 1 ? ' first' : '') }, [
+        el('span', { class: 'lb-rank', text: place === 1 ? '👑' : String(place) }),
         el('span', { class: 'lb-name', text: row.name }),
         el('span', { class: 'lb-score', text: String(row.score) }),
       ]));
@@ -687,7 +689,9 @@
     var tot = Scoring.totals(game);
     var rows = game.players.map(function (p) { return { name: p.name, score: tot[p.id] || 0 }; });
     rows.sort(function (a, b) { return b.score - a.score; });
-    app.appendChild(el('div', { class: 'winner', text: '🏆 Победил: ' + rows[0].name + ' (' + rows[0].score + ')' }));
+    var top = rows[0].score;
+    var winners = rows.filter(function (r) { return r.score === top; }).map(function (r) { return r.name; });
+    app.appendChild(el('div', { class: 'winner', text: (winners.length > 1 ? '🏆 Победили: ' + winners.join(' и ') : '🏆 Победил: ' + winners[0]) + ' (' + top + ')' }));
     app.appendChild(renderLeaderboard(game, tot));
     app.appendChild(el('button', { class: 'btn ghost sm', text: '🗺️ Разбор по раундам', onclick: function () { state.screen = 'history'; render(); window.scrollTo(0, 0); } }));
     app.appendChild(el('button', { class: 'btn ghost sm', text: '📨 Пригласить (скопировать адрес)', onclick: copyTableLink }));
