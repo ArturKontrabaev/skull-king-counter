@@ -198,3 +198,81 @@ h2.screen-title { font-size: 16px; color: var(--muted); font-weight: 600; margin
 .spacer { height: 10px; }
 .winner { text-align: center; font-size: 20px; font-weight: 800; color: var(--gold); margin: 10px 0; }
 .sticky-cta { position: sticky; bottom: 0; padding: 10px 0 calc(10px + env(safe-area-inset-bottom)); background: linear-gradient(0deg, var(--bg) 70%, transparent); }
+
+/* ===================== v2: компактный UI (один экран, кнопки, до 8 игроков) ===================== */
+html, body { font-size: 15px; }
+main { padding: 10px 10px 28px; }
+.pscore { padding-top: 8px; margin-top: 8px; }
+.pscore:first-child { padding-top: 0; margin-top: 0; }
+.pname-row { margin-bottom: 4px; }
+.pname { font-size: 15px; }
+.ptotal { font-size: 12px; }
+.sel-wrap { display: flex; align-items: center; gap: 8px; margin-top: 5px; }
+.sel-lbl { width: 48px; font-size: 12px; color: var(--muted); flex: none; }
+.selrow { display: flex; flex-wrap: wrap; gap: 5px; flex: 1; }
+.selbtn { min-width: 34px; height: 36px; border-radius: 8px; border: 1px solid var(--border); background: var(--card2); color: var(--fg); font-size: 15px; font-weight: 700; line-height: 1; cursor: pointer; padding: 0; }
+.selbtn.on { background: var(--gold); color: #3a2c00; border-color: var(--gold); }
+.selbtn:disabled { opacity: .5; }
+.result { margin-top: 6px; font-size: 13px; }
+.result .sum { font-size: 17px; }
+.bonuses { margin-top: 6px; gap: 6px; }
+.chip { padding: 5px 8px; font-size: 12px; }
+.round-head .rnum { font-size: 19px; }
+
+/* история v2 — развёрнуто + фильтр */
+.filterbar { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.fbtn { padding: 6px 11px; border-radius: 999px; border: 1px solid var(--border); background: var(--card2); color: var(--fg); font-size: 13px; cursor: pointer; }
+.fbtn.on { background: var(--gold); color: #3a2c00; border-color: var(--gold); }
+.hround-open { padding: 10px 12px; }
+.hround-head { display: flex; justify-content: space-between; align-items: baseline; font-weight: 700; margin-bottom: 6px; }
+.hrn { font-size: 15px; }
+
+/* ===================== v2.1: ещё компактнее (больше игроков на экран) ===================== */
+html, body { font-size: 14px; }
+.topbar { padding: calc(5px + env(safe-area-inset-top)) 10px 5px; }
+.brand { font-size: 16px; }
+.icon-btn { width: 38px; height: 38px; font-size: 18px; }
+main { padding: 8px 10px 24px; }
+.card { padding: 8px 10px; margin-bottom: 8px; }
+.round-head { margin-bottom: 6px; }
+.round-head .rnum { font-size: 17px; }
+.round-head .cards, .round-head .dealer, .round-head .online { font-size: 11px; }
+.pscore { padding-top: 6px; margin-top: 6px; }
+.pname-row { margin-bottom: 2px; }
+.pname { font-size: 14px; }
+.ptotal { font-size: 11px; }
+.sel-wrap { gap: 6px; margin-top: 3px; }
+.sel-lbl { width: 40px; font-size: 11px; }
+.selrow { gap: 4px; }
+.selbtn { min-width: 30px; height: 30px; font-size: 14px; border-radius: 7px; }
+.result { margin-top: 3px; font-size: 12px; }
+.result .sum { font-size: 15px; }
+.result .why { font-size: 11px; margin-top: 1px; line-height: 1.35; }
+.bonuses { margin-top: 4px; gap: 5px; }
+.chip { padding: 4px 7px; font-size: 11px; }
+.chip .dec { font-size: 15px; }
+.sticky-cta { padding: 8px 0 calc(8px + env(safe-area-inset-bottom)); }
+.btn { min-height: 46px; font-size: 16px; }
+.btn.sm { min-height: 36px; }
+
+/* ===================== v2.2: очки за раунд в строке имени, ещё плотнее ===================== */
+.pname-row { display: flex; align-items: baseline; gap: 8px; }
+.pname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row-sum { font-weight: 800; font-size: 15px; font-variant-numeric: tabular-nums; flex: none; }
+.row-sum.pos { color: var(--green); }
+.row-sum.neg { color: var(--red); }
+.ptotal { font-size: 11px; color: var(--muted); flex: none; min-width: 34px; text-align: right; }
+.pscore { padding-top: 5px; margin-top: 5px; }
+.sel-wrap { margin-top: 2px; gap: 5px; }
+.sel-lbl { width: 36px; }
+.selbtn { min-width: 28px; height: 28px; font-size: 13px; border-radius: 6px; }
+
+.hrow .hs { white-space: nowrap; }
+
+/* история: за раунд (цвет по знаку) + нарастающий итог (золотой, ключевой) */
+.hrow .hs { display: inline-flex; align-items: baseline; gap: 8px; white-space: nowrap; }
+.hs .hd { font-size: 12px; font-variant-numeric: tabular-nums; }
+.hs .hd.pos { color: var(--green); }
+.hs .hd.neg { color: var(--red); }
+.hs .hd.zero { color: var(--muted); }
+.hs .ht { font-size: 16px; font-weight: 800; color: var(--gold); font-variant-numeric: tabular-nums; min-width: 30px; text-align: right; }

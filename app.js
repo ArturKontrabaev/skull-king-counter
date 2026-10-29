@@ -2,7 +2,7 @@
 (function () {
   'use strict';
 
-  var STORE = 'skullking_game_v1';
+  var STORE = 'skullking_v2_game';
   var TOTAL_ROUNDS = Scoring.TOTAL_ROUNDS; // 10
 
   // --- Supabase (онлайн-стол: все видят партию live) ---
@@ -18,7 +18,7 @@
   // метка устройства (без регистрации) — для режима «ведущий / просмотр»
   var DEVICE_ID = (function () {
     try {
-      var k = 'skullking_device', v = localStorage.getItem(k);
+      var k = 'skullking_v2_device', v = localStorage.getItem(k);
       if (!v) { v = 'd' + Math.random().toString(36).slice(2, 10); localStorage.setItem(k, v); }
       return v;
     } catch (e) { return 'd' + Math.random().toString(36).slice(2, 10); }
@@ -72,7 +72,15 @@
     game.players.forEach(function (p) {
       entries[p.id] = { bid: 0, tricks: 0, bonuses: {} };
     });
-    game.rounds.push({ n: n, phase: 'bids', entries: entries });
+    game.rounds.push({ n: n, phase: 'open', entries: entries });
+  }
+  // порядок хода: лидер (слева от сдающего) первым, дальше по кругу
+  function turnOrder(game, round) {
+    var n = game.players.length; if (!n) return [];
+    var dealerIdx = ((game.dealerStart || 0) + (round.n - 1)) % n;
+    var lead = (dealerIdx + 1) % n, out = [];
+    for (var k = 0; k < n; k++) out.push(game.players[(lead + k) % n]);
+    return out;
   }
 
   function currentRound(game) {
@@ -101,8 +109,8 @@
   }
 
   // ---------- общая база игроков + архив партий (одна на всю компанию, в облаке) ----------
-  var LINEUP = 'skullking_lineup_v1';   // последний состав (локальная мелочь, не общая)
-  var CREW_STORE = 'skullking_crew_v2'; // локальное зеркало общей базы (v2 — сброс тестового мусора)
+  var LINEUP = 'skullking_v2_lineup';   // последний состав (локальная мелочь, не общая)
+  var CREW_STORE = 'skullking_v2_crew'; // локальное зеркало общей базы (v2 — сброс тестового мусора)
   var crew = { players: [], history: [], removed: [] };
   try { var _cm = JSON.parse(localStorage.getItem(CREW_STORE)); if (_cm) crew = { players: _cm.players || [], history: _cm.history || [], removed: _cm.removed || [] }; } catch (e) {}
   function persistCrew() { try { localStorage.setItem(CREW_STORE, JSON.stringify(crew)); } catch (e) {} }
@@ -137,14 +145,23 @@
   }
 
   function playerStats(id) {
-    var games = 0, wins = 0, sum = 0, best = null;
+    var games = 0, wins = 0, sum = 0, best = null, placeSum = 0;
     loadHistory().forEach(function (g) {
       if (!g.scores || !(id in g.scores)) return;
       games++; var s = g.scores[id]; sum += s;
       if (best === null || s > best) best = s;
       if (g.winnerId === id) wins++;
+      // место = сколько игроков набрали строго больше, +1
+      var higher = 0; for (var pid in g.scores) { if (g.scores[pid] > s) higher++; }
+      placeSum += higher + 1;
     });
-    return { games: games, wins: wins, avg: games ? Math.round(sum / games) : 0, best: best === null ? 0 : best };
+    return {
+      games: games, wins: wins,
+      avg: games ? Math.round(sum / games) : 0,
+      best: best === null ? 0 : best,
+      avgPlace: games ? placeSum / games : 0,
+      winRate: games ? Math.round(100 * wins / games) : 0,
+    };
   }
 
   // ---------- передача партии ссылкой (без сервера: состояние зашито в URL) ----------
@@ -182,8 +199,8 @@
   // ---------- ЕДИНЫЙ ОБЩИЙ СТОЛ (Supabase) ----------
   // Один адрес = одна текущая партия (id='current') + одна база (id='crew').
   // Кто открыл ссылку — видит и редактирует одно и то же, всё синхронно.
-  var CURRENT_ID = 'current';
-  var CREW_ID = 'crew';
+  var CURRENT_ID = 'current_v2';
+  var CREW_ID = 'crew_v2';
   var gamePushTimer = null, crewPushTimer = null, pollTimer = null;
 
   function cloudPushGameNow() {
@@ -287,6 +304,10 @@
     return e;
   }
   function esc(s) { return String(s).replace(/[&<>]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]; }); }
+  // батя в здании 🏴‍☠️
+  function flag(name) { return (name || '').trim().toLowerCase() === 'артур' ? name + ' 🏴‍☠️' : name; }
+  // (троллинг с +0.5 отключён по просьбе Артура)
+  function shown(total, name) { return total; }
 
   var app = document.getElementById('app');
   function render() {
@@ -364,7 +385,7 @@
         }, [
           el('span', { class: 'drag', text: '≡' }),
           el('span', { class: 'pick-box', text: String(i + 1) }),
-          el('span', { class: 'pick-name', text: nameById[id] }),
+          el('span', { class: 'pick-name', text: flag(nameById[id]) }),
           up, dn,
         ]);
         ord.appendChild(row);
@@ -435,8 +456,9 @@
               var r = loadRoster(); r.splice(i, 1); saveRoster(r); render();
             } }),
           ]),
-          el('div', { class: 'why', html: 'партий: <b>' + st.games + '</b> · побед: <b>' + st.wins +
-            '</b> · ср. счёт: <b>' + st.avg + '</b> · рекорд: <b>' + st.best + '</b>' }),
+          el('div', { class: 'why', html: 'партий: <b>' + st.games + '</b> · побед: <b>' + st.wins + '</b> (' + st.winRate +
+            '%) · ср. место: <b>' + (st.games ? st.avgPlace.toFixed(1) : '—') + '</b> · ср. счёт: <b>' + st.avg +
+            '</b> · рекорд: <b>' + st.best + '</b>' }),
         ]));
       });
       app.appendChild(card);
@@ -455,6 +477,32 @@
     ]));
     if (focusNewPlayer) { focusNewPlayer = false; setTimeout(function () { try { newInput.focus(); } catch (e) {} }, 0); }
 
+    // прошлые игры (архив завершённых партий)
+    var hist = loadHistory();
+    if (hist.length) {
+      app.appendChild(el('h2', { class: 'screen-title', text: 'Прошлые игры (' + hist.length + ')' }));
+      hist.slice().reverse().forEach(function (g) {
+        var nameById = {}; (g.players || []).forEach(function (p) { nameById[p.id] = p.name; });
+        var ranking = Object.keys(g.scores || {}).map(function (id) { return { name: nameById[id] || '?', score: g.scores[id] }; })
+          .sort(function (a, b) { return b.score - a.score; });
+        var dstr = '';
+        try { if (g.finishedAt) { var d = new Date(g.finishedAt); dstr = d.getDate() + '.' + (d.getMonth() + 1); } } catch (e) {}
+        var gc = el('div', { class: 'card hround-open' });
+        gc.appendChild(el('div', { class: 'hround-head' }, [
+          el('span', { class: 'hrn', text: '🏆 ' + (ranking[0] ? flag(ranking[0].name) : '—') }),
+          el('span', { class: 'muted', text: dstr }),
+        ]));
+        ranking.forEach(function (r, i) {
+          gc.appendChild(el('div', { class: 'hrow' }, [
+            el('span', { class: 'hn', text: (i + 1) + '. ' + flag(r.name) }),
+            el('span', { class: 'hwhy', text: '' }),
+            el('span', { class: 'hs', html: '<span class="ht">' + r.score + '</span>' }),
+          ]));
+        });
+        app.appendChild(gc);
+      });
+    }
+
     app.appendChild(el('div', { class: 'spacer' }));
     if (loadHistory().length) {
       app.appendChild(el('button', { class: 'btn danger sm', text: '🗑️ Очистить статистику (архив партий)', onclick: function () {
@@ -463,7 +511,7 @@
       } }));
     }
     app.appendChild(el('button', { class: 'btn', text: '← Назад', onclick: function () {
-      state.screen = 'setup'; render(); window.scrollTo(0, 0);
+      state.screen = state.game ? 'game' : 'setup'; render(); window.scrollTo(0, 0);
     } }));
   }
 
@@ -487,34 +535,28 @@
               onclick: function () { game.dealerStart = ((game.dealerStart || 0) + 1) % game.players.length; save(); render(); } })) : null,
         el('div', { class: 'online', text: ro ? '🌐 общий стол · 👀 просмотр' : '🌐 общий стол · ✍️ вы ведёте счёт' }),
       ]),
-      el('span', { class: 'phase-pill', text: round.phase === 'bids' ? 'СТАВКИ' : 'ВЗЯТКИ' }),
     ]));
 
+    // все игроки на одном экране, в порядке хода (лидер первым)
     var card = el('div', { class: 'card' });
-    game.players.forEach(function (p) {
-      card.appendChild(renderPlayerInRound(game, round, p, tot[p.id], round.phase, ro));
+    turnOrder(game, round).forEach(function (p) {
+      card.appendChild(renderPlayerRowV2(game, round, p, tot[p.id], ro));
     });
     app.appendChild(card);
 
-    // валидация суммы взяток в фазе взяток
-    if (round.phase === 'tricks') {
-      var sumT = game.players.reduce(function (s, p) { return s + (round.entries[p.id].tricks || 0); }, 0);
-      if (sumT !== round.n) {
-        app.appendChild(el('div', { class: 'card', html:
-          '<span class="why warn">⚠️ Сумма взяток = ' + sumT + ', а разыграно должно быть ' + round.n +
-          '. Проверь ввод (кракен/эскейпы могут давать расхождение — тогда ок).</span>' }));
-      }
+    // проверка суммы взяток
+    var sumT = game.players.reduce(function (s, p) { return s + (round.entries[p.id].tricks || 0); }, 0);
+    if (sumT !== round.n) {
+      app.appendChild(el('div', { class: 'card', html:
+        '<span class="why warn">⚠️ Сумма взяток = ' + sumT + ', а карт в раунде ' + round.n +
+        '. Норм, если был Кракен/Кит/эскейпы.</span>' }));
     }
 
-    // кнопка перехода / режим просмотра
+    // завершение раунда / режим просмотра
     var cta = el('div', { class: 'sticky-cta' });
     if (ro) {
       cta.appendChild(el('div', { class: 'card', html: '<span class="muted">👀 Режим просмотра — счёт ведёт другой игрок. Обновляется автоматически.</span>' }));
       cta.appendChild(el('button', { class: 'btn', text: '✋ Взять ведение', onclick: takeControl }));
-    } else if (round.phase === 'bids') {
-      cta.appendChild(el('button', { class: 'btn', text: 'Раунд сыгран →', onclick: function () {
-        round.phase = 'tricks'; save(); render();
-      } }));
     } else {
       var last = round.n >= TOTAL_ROUNDS;
       cta.appendChild(el('button', { class: 'btn gold', text: last ? '🏆 Завершить партию' : 'Завершить раунд ' + round.n + ' →', onclick: function () {
@@ -525,13 +567,10 @@
       } }));
       if (!last) {
         cta.appendChild(el('button', { class: 'btn ghost sm', text: '🏁 Завершить партию на этом раунде', onclick: function () {
-          if (!confirm('Завершить партию на раунде ' + round.n + '?')) return;
+          if (!confirm('Завершить партию на раунде ' + round.n + '? (например, карт не хватает на дальше)')) return;
           round.phase = 'done'; game.finished = true; archiveGame(game); save(); render(); window.scrollTo(0, 0);
         } }));
       }
-      cta.appendChild(el('button', { class: 'btn ghost sm', text: '← Вернуться к ставкам', onclick: function () {
-        round.phase = 'bids'; save(); render();
-      } }));
     }
     app.appendChild(cta);
 
@@ -541,7 +580,8 @@
 
     // нижние действия
     app.appendChild(el('div', { class: 'spacer' }));
-    app.appendChild(el('button', { class: 'btn ghost sm', text: '🗺️ История раундов', onclick: function () { state.screen = 'history'; render(); window.scrollTo(0, 0); } }));
+    app.appendChild(el('button', { class: 'btn ghost sm', text: '🗺️ История раундов (текущая партия)', onclick: function () { state.screen = 'history'; render(); window.scrollTo(0, 0); } }));
+    app.appendChild(el('button', { class: 'btn ghost sm', text: '👥 Игроки и статистика', onclick: function () { state.screen = 'players'; render(); window.scrollTo(0, 0); } }));
     app.appendChild(el('button', { class: 'btn ghost sm', text: '📨 Пригласить (скопировать адрес)', onclick: copyTableLink }));
     if (!ro) {
       app.appendChild(el('button', { class: 'btn ghost sm', text: '⚙️ Настройка бонусов', onclick: function () {
@@ -556,7 +596,7 @@
     var block = el('div', { class: 'pscore' });
 
     block.appendChild(el('div', { class: 'pname-row' }, [
-      el('span', { class: 'pname', text: player.name }),
+      el('span', { class: 'pname', text: flag(player.name) }),
       el('span', { class: 'ptotal', text: 'всего: ' + totalScore }),
     ]));
 
@@ -575,10 +615,10 @@
       block.appendChild(el('div', { class: 'field-label', text: tlabel }));
       block.appendChild(stepper(entry.tricks, 0, round.n, function (v) { entry.tricks = v; save(); render(); }, readonly));
 
-      // бонусы — только если угадал ставку (bid==tricks) И взял ≥1 взятку
+      // бонусы — только включённые И только если игрок реально взял ≥1 взятку
       // (в режиме просмотра чипы не показываем — бонусы видны в расшифровке ниже)
       var enabled = game.bonuses.filter(function (b) { return b.enabled; });
-      if (!readonly && enabled.length && entry.tricks > 0 && entry.bid === entry.tricks) {
+      if (!readonly && enabled.length && entry.tricks > 0) {
         var wrap = el('div', { class: 'bonuses' });
         enabled.forEach(function (b) {
           var cnt = entry.bonuses[b.id] || 0;
@@ -638,7 +678,7 @@
 
     var card = el('div', { class: 'card' });
     game.players.forEach(function (p) {
-      card.appendChild(renderPlayerInRound(game, round, p, tot[p.id], 'edit'));
+      card.appendChild(renderPlayerRowV2(game, round, p, tot[p.id], false));
     });
     app.appendChild(card);
 
@@ -672,6 +712,59 @@
     ]);
   }
 
+  // ---------- v2: выбор числа кнопками (0…max) ----------
+  function selector(value, max, onpick, readonly) {
+    var row = el('div', { class: 'selrow' });
+    for (var i = 0; i <= max; i++) {
+      (function (i) {
+        var b = el('button', { class: 'selbtn' + (i === value ? ' on' : ''), text: String(i) });
+        if (readonly) b.disabled = true; else b.addEventListener('click', function () { onpick(i); });
+        row.appendChild(b);
+      })(i);
+    }
+    return row;
+  }
+
+  // ---------- v2: компактная строка игрока (ставка+взятки+бонусы+итог на одном экране) ----------
+  function renderPlayerRowV2(game, round, player, totalScore, readonly) {
+    var entry = round.entries[player.id];
+    var block = el('div', { class: 'pscore' });
+    var rr = Scoring.roundScore(entry, round.n, game.bonuses);
+    var rcls = rr.total > 0 ? 'pos' : (rr.total < 0 ? 'neg' : '');
+    block.appendChild(el('div', { class: 'pname-row' }, [
+      el('span', { class: 'pname', text: flag(player.name) }),
+      el('span', { class: 'row-sum ' + rcls, text: (rr.total > 0 ? '+' : '') + rr.total }),
+      el('span', { class: 'ptotal', text: 'итого ' + shown(totalScore, player.name) }),
+    ]));
+    block.appendChild(el('div', { class: 'sel-wrap' }, [
+      el('span', { class: 'sel-lbl', text: 'ставка' }),
+      selector(entry.bid, round.n, function (v) { entry.bid = v; save(); render(); }, readonly),
+    ]));
+    block.appendChild(el('div', { class: 'sel-wrap' }, [
+      el('span', { class: 'sel-lbl', text: 'взял' }),
+      selector(entry.tricks, round.n, function (v) { entry.tricks = v; save(); render(); }, readonly),
+    ]));
+    // бонусы — только если угадал ставку (bid==tricks) И взял ≥1 взятку, и не в просмотре
+    var enabled = game.bonuses.filter(function (b) { return b.enabled; });
+    if (!readonly && enabled.length && entry.tricks > 0 && entry.bid === entry.tricks) {
+      var wrap = el('div', { class: 'bonuses' });
+      enabled.forEach(function (b) {
+        var cnt = entry.bonuses[b.id] || 0;
+        wrap.appendChild(el('div', { class: 'chip' + (cnt > 0 ? ' active' : ''), onclick: function (ev) {
+          if (ev.target.classList.contains('dec')) return;
+          entry.bonuses[b.id] = cnt + 1; save(); render();
+        } }, [
+          el('span', { class: 'dec', text: '−', onclick: function () { entry.bonuses[b.id] = Math.max(0, cnt - 1); save(); render(); } }),
+          el('span', { class: 'cnt', text: String(cnt) }),
+          el('span', { text: b.label }),
+          el('span', { class: 'pts', text: '+' + b.points }),
+        ]));
+      });
+      block.appendChild(wrap);
+    }
+    return block;
+  }
+
   // ---------- лидерборд ----------
   function renderLeaderboard(game, tot) {
     var rows = game.players.map(function (p) { return { name: p.name, score: tot[p.id] || 0 }; });
@@ -682,7 +775,7 @@
       var place = rows.filter(function (r) { return r.score > row.score; }).length + 1;
       card.appendChild(el('div', { class: 'lb-row' + (place === 1 ? ' first' : '') }, [
         el('span', { class: 'lb-rank', text: place === 1 ? '👑' : String(place) }),
-        el('span', { class: 'lb-name', text: row.name }),
+        el('span', { class: 'lb-name', text: flag(row.name) }),
         el('span', { class: 'lb-score', text: String(row.score) }),
       ]));
     });
@@ -696,7 +789,7 @@
     var rows = game.players.map(function (p) { return { name: p.name, score: tot[p.id] || 0 }; });
     rows.sort(function (a, b) { return b.score - a.score; });
     var top = rows[0].score;
-    var winners = rows.filter(function (r) { return r.score === top; }).map(function (r) { return r.name; });
+    var winners = rows.filter(function (r) { return r.score === top; }).map(function (r) { return flag(r.name); });
     app.appendChild(el('div', { class: 'winner', text: (winners.length > 1 ? '🏆 Победили: ' + winners.join(' и ') : '🏆 Победил: ' + winners[0]) + ' (' + top + ')' }));
     app.appendChild(renderLeaderboard(game, tot));
     app.appendChild(el('button', { class: 'btn ghost sm', text: '🗺️ Разбор по раундам', onclick: function () { state.screen = 'history'; render(); window.scrollTo(0, 0); } }));
@@ -709,42 +802,72 @@
     }
   }
 
-  // ---------- экран: история ----------
+  // ---------- экран: история (v2: развёрнуто + фильтр по игроку) ----------
+  var historyFilter = null; // null = все игроки, иначе id игрока
   function renderHistory() {
     var game = state.game;
     app.appendChild(el('h2', { class: 'screen-title', text: 'История партии' }));
     if (!game || !game.rounds.length) {
       app.appendChild(el('div', { class: 'card muted', text: 'Пока нет сыгранных раундов.' }));
-    } else {
-      var played = [];
-      game.rounds.forEach(function (r, i) { if (r.phase === 'done') played.push({ round: r, idx: i }); });
-      if (!played.length) app.appendChild(el('div', { class: 'card muted', text: 'Ни одного завершённого раунда.' }));
-      played.slice().reverse().forEach(function (o) {
-        var round = o.round, idx = o.idx;
-        var det = el('details', { class: 'card hround' });
-        var sumLine = el('summary', {}, [
-          el('span', { text: 'Раунд ' + round.n }),
-          el('span', { class: 'muted', text: round.n + ' карт' }),
-        ]);
-        det.appendChild(sumLine);
-        game.players.forEach(function (p) {
-          var r = Scoring.roundScore(round.entries[p.id], round.n, game.bonuses);
-          var why = r.baseReason;
-          r.bonusBreakdown.forEach(function (b) { why += '; ' + b.label + (b.count > 1 ? ' ×' + b.count : '') + ' +' + b.sum; });
-          det.appendChild(el('div', { class: 'hrow' }, [
-            el('span', { class: 'hn', text: p.name }),
-            el('span', { class: 'hwhy', text: why }),
-            el('span', { class: 'hs', text: (r.total > 0 ? '+' : '') + r.total }),
-          ]));
-        });
-        if (canEdit()) {
-          det.appendChild(el('button', { class: 'btn ghost sm', text: '✏️ Редактировать раунд ' + round.n, onclick: function () {
-            state.editingRoundIndex = idx; state.screen = 'edit'; render(); window.scrollTo(0, 0);
-          } }));
-        }
-        app.appendChild(det);
-      });
+      app.appendChild(el('button', { class: 'btn ghost sm', text: '← Назад', onclick: function () { state.screen = 'game'; render(); } }));
+      return;
     }
+    var played = [];
+    game.rounds.forEach(function (r, i) { if (r.phase === 'done') played.push({ round: r, idx: i }); });
+    if (!played.length) {
+      app.appendChild(el('div', { class: 'card muted', text: 'Ни одного завершённого раунда.' }));
+      app.appendChild(el('button', { class: 'btn ghost sm', text: '← Назад', onclick: function () { state.screen = 'game'; render(); } }));
+      return;
+    }
+
+    // фильтр по игроку
+    if (historyFilter && !game.players.some(function (p) { return p.id === historyFilter; })) historyFilter = null;
+    var fbar = el('div', { class: 'filterbar' });
+    fbar.appendChild(el('button', { class: 'fbtn' + (historyFilter === null ? ' on' : ''), text: 'Все', onclick: function () { historyFilter = null; render(); } }));
+    game.players.forEach(function (p) {
+      fbar.appendChild(el('button', { class: 'fbtn' + (historyFilter === p.id ? ' on' : ''), text: p.name, onclick: function () { historyFilter = p.id; render(); } }));
+    });
+    app.appendChild(fbar);
+
+    var who = historyFilter ? game.players.filter(function (p) { return p.id === historyFilter; }) : game.players;
+    var runTotal = {}; who.forEach(function (p) { runTotal[p.id] = 0; });
+
+    // при фильтре по игроку — его текущий счёт сверху
+    if (historyFilter && who[0]) {
+      var curTot = Scoring.totals(game)[historyFilter] || 0;
+      app.appendChild(el('div', { class: 'card', html:
+        '<b>' + esc(who[0].name) + '</b> — сейчас: <b class="row-sum ' + (curTot >= 0 ? 'pos' : 'neg') + '">' + shown(curTot, who[0].name) + '</b>' }));
+    }
+
+    played.forEach(function (o) { // по возрастанию раундов (нарастающий итог)
+      var round = o.round, idx = o.idx;
+      var cardEl = el('div', { class: 'card hround-open' });
+      cardEl.appendChild(el('div', { class: 'hround-head' }, [
+        el('span', { class: 'hrn', text: 'Раунд ' + round.n }),
+        el('span', { class: 'muted', text: round.n + ' карт' }),
+      ]));
+      who.forEach(function (p) {
+        var r = Scoring.roundScore(round.entries[p.id], round.n, game.bonuses);
+        runTotal[p.id] += r.total;
+        var why = r.baseReason;
+        r.bonusBreakdown.forEach(function (b) { why += '; ' + b.label + (b.count > 1 ? ' ×' + b.count : '') + ' +' + b.sum; });
+        var dcls = r.total > 0 ? 'pos' : (r.total < 0 ? 'neg' : 'zero');
+        cardEl.appendChild(el('div', { class: 'hrow' }, [
+          el('span', { class: 'hn', text: flag(p.name) }),
+          el('span', { class: 'hwhy', text: why }),
+          el('span', { class: 'hs', html:
+            '<span class="hd ' + dcls + '">' + (r.total > 0 ? '+' : '') + r.total + '</span>' +
+            '<span class="ht">' + runTotal[p.id] + '</span>' }),
+        ]));
+      });
+      if (canEdit()) {
+        cardEl.appendChild(el('button', { class: 'btn ghost sm', text: '✏️ Редактировать', onclick: function () {
+          state.editingRoundIndex = idx; state.screen = 'edit'; render(); window.scrollTo(0, 0);
+        } }));
+      }
+      app.appendChild(cardEl);
+    });
+
     app.appendChild(el('button', { class: 'btn ghost sm', text: '← Назад', onclick: function () { state.screen = 'game'; render(); } }));
   }
 
