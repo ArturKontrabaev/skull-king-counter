@@ -306,6 +306,8 @@
   function esc(s) { return String(s).replace(/[&<>]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]; }); }
   // батя в здании 🏴‍☠️
   function flag(name) { return (name || '').trim().toLowerCase() === 'артур' ? name + ' 🏴‍☠️' : name; }
+  // троллинг: Артуру +0.5 к ОТОБРАЖАЕМОМУ счёту (на реальный подсчёт/победителя не влияет)
+  function shown(total, name) { return (name || '').trim().toLowerCase() === 'артур' ? (total + 0.5) : total; }
 
   var app = document.getElementById('app');
   function render() {
@@ -699,7 +701,7 @@
     block.appendChild(el('div', { class: 'pname-row' }, [
       el('span', { class: 'pname', text: flag(player.name) }),
       el('span', { class: 'row-sum ' + rcls, text: (rr.total > 0 ? '+' : '') + rr.total }),
-      el('span', { class: 'ptotal', text: 'итого ' + totalScore }),
+      el('span', { class: 'ptotal', text: 'итого ' + shown(totalScore, player.name) }),
     ]));
     block.appendChild(el('div', { class: 'sel-wrap' }, [
       el('span', { class: 'sel-lbl', text: 'ставка' }),
@@ -739,7 +741,7 @@
       card.appendChild(el('div', { class: 'lb-row' + (i === 0 ? ' first' : '') }, [
         el('span', { class: 'lb-rank', text: i === 0 ? '👑' : String(i + 1) }),
         el('span', { class: 'lb-name', text: flag(row.name) }),
-        el('span', { class: 'lb-score', text: String(row.score) }),
+        el('span', { class: 'lb-score', text: String(shown(row.score, row.name)) }),
       ]));
     });
     return card;
@@ -797,7 +799,7 @@
     if (historyFilter && who[0]) {
       var curTot = Scoring.totals(game)[historyFilter] || 0;
       app.appendChild(el('div', { class: 'card', html:
-        '<b>' + esc(who[0].name) + '</b> — сейчас: <b class="row-sum ' + (curTot >= 0 ? 'pos' : 'neg') + '">' + curTot + '</b>' }));
+        '<b>' + esc(who[0].name) + '</b> — сейчас: <b class="row-sum ' + (curTot >= 0 ? 'pos' : 'neg') + '">' + shown(curTot, who[0].name) + '</b>' }));
     }
 
     played.forEach(function (o) { // по возрастанию раундов (нарастающий итог)
