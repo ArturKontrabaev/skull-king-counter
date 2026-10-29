@@ -477,6 +477,32 @@
     ]));
     if (focusNewPlayer) { focusNewPlayer = false; setTimeout(function () { try { newInput.focus(); } catch (e) {} }, 0); }
 
+    // прошлые игры (архив завершённых партий)
+    var hist = loadHistory();
+    if (hist.length) {
+      app.appendChild(el('h2', { class: 'screen-title', text: 'Прошлые игры (' + hist.length + ')' }));
+      hist.slice().reverse().forEach(function (g) {
+        var nameById = {}; (g.players || []).forEach(function (p) { nameById[p.id] = p.name; });
+        var ranking = Object.keys(g.scores || {}).map(function (id) { return { name: nameById[id] || '?', score: g.scores[id] }; })
+          .sort(function (a, b) { return b.score - a.score; });
+        var dstr = '';
+        try { if (g.finishedAt) { var d = new Date(g.finishedAt); dstr = d.getDate() + '.' + (d.getMonth() + 1); } } catch (e) {}
+        var gc = el('div', { class: 'card hround-open' });
+        gc.appendChild(el('div', { class: 'hround-head' }, [
+          el('span', { class: 'hrn', text: '🏆 ' + (ranking[0] ? flag(ranking[0].name) : '—') }),
+          el('span', { class: 'muted', text: dstr }),
+        ]));
+        ranking.forEach(function (r, i) {
+          gc.appendChild(el('div', { class: 'hrow' }, [
+            el('span', { class: 'hn', text: (i + 1) + '. ' + flag(r.name) }),
+            el('span', { class: 'hwhy', text: '' }),
+            el('span', { class: 'hs', html: '<span class="ht">' + r.score + '</span>' }),
+          ]));
+        });
+        app.appendChild(gc);
+      });
+    }
+
     app.appendChild(el('div', { class: 'spacer' }));
     if (loadHistory().length) {
       app.appendChild(el('button', { class: 'btn danger sm', text: '🗑️ Очистить статистику (архив партий)', onclick: function () {
@@ -485,7 +511,7 @@
       } }));
     }
     app.appendChild(el('button', { class: 'btn', text: '← Назад', onclick: function () {
-      state.screen = 'setup'; render(); window.scrollTo(0, 0);
+      state.screen = state.game ? 'game' : 'setup'; render(); window.scrollTo(0, 0);
     } }));
   }
 
@@ -554,7 +580,8 @@
 
     // нижние действия
     app.appendChild(el('div', { class: 'spacer' }));
-    app.appendChild(el('button', { class: 'btn ghost sm', text: '🗺️ История раундов', onclick: function () { state.screen = 'history'; render(); window.scrollTo(0, 0); } }));
+    app.appendChild(el('button', { class: 'btn ghost sm', text: '🗺️ История раундов (текущая партия)', onclick: function () { state.screen = 'history'; render(); window.scrollTo(0, 0); } }));
+    app.appendChild(el('button', { class: 'btn ghost sm', text: '👥 Игроки и статистика', onclick: function () { state.screen = 'players'; render(); window.scrollTo(0, 0); } }));
     app.appendChild(el('button', { class: 'btn ghost sm', text: '📨 Пригласить (скопировать адрес)', onclick: copyTableLink }));
     if (!ro) {
       app.appendChild(el('button', { class: 'btn ghost sm', text: '⚙️ Настройка бонусов', onclick: function () {
