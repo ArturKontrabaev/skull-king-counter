@@ -534,6 +534,7 @@
 
     // нижние действия
     app.appendChild(el('div', { class: 'spacer' }));
+    app.appendChild(el('button', { class: 'btn ghost sm', text: '🗺️ История раундов', onclick: function () { state.screen = 'history'; render(); window.scrollTo(0, 0); } }));
     app.appendChild(el('button', { class: 'btn ghost sm', text: '📨 Пригласить (скопировать адрес)', onclick: copyTableLink }));
     if (!ro) {
       app.appendChild(el('button', { class: 'btn ghost sm', text: '⚙️ Настройка бонусов', onclick: function () {
